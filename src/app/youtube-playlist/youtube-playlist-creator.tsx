@@ -1,7 +1,7 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Search, PlusCircle, Music, Trash2, Play, Pause, SkipBack, SkipForward } from 'lucide-react'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import YouTube from 'react-youtube'
@@ -27,7 +27,13 @@ interface Song extends Video {
   playlistId: string
 }
 
-export default function YouTubePlaylistCreator() {
+function decodeHtmlEntities(text: string): string {
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = text;
+  return textarea.value;
+}
+
+const YouTubePlaylistCreator: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Video[]>([])
   const [playlist, setPlaylist] = useState<Song[]>([])
@@ -35,7 +41,7 @@ export default function YouTubePlaylistCreator() {
   const [error, setError] = useState<string | null>(null)
   const [currentSong, setCurrentSong] = useState<Song | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [duration, setDuration] = useState(0)
+  const [duration, setDuration] = useState(100) // Set a default value > 0
   const [currentTime, setCurrentTime] = useState(0)
   const [isSeeking, setIsSeeking] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -360,13 +366,13 @@ export default function YouTubePlaylistCreator() {
               <CardContent className="p-4 flex items-center gap-4">
                 <Image 
   src={video.thumbnail} 
-  alt={video.title} 
+  alt={decodeHtmlEntities(video.title)} 
   width={120} 
   height={90} 
   className="w-full h-auto" 
 />
                 <div className="flex-grow">
-                  <h3 className="font-medium line-clamp-2">{video.title}</h3>
+                  <h3 className="font-medium line-clamp-2">{decodeHtmlEntities(video.title)}</h3>
                   <Button onClick={() => addToPlaylist(video)} size="sm" className="mt-2">
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Add to Playlist
@@ -399,75 +405,77 @@ export default function YouTubePlaylistCreator() {
             onStateChange={onPlayerStateChange}
           />
           <div className="mt-4">
-            <Range
-              values={[currentTime]}
-              step={1}
-              min={0}
-              max={duration}
-              onChange={handleSeek}
-              onFinalChange={() => setIsSeeking(false)}
-              renderTrack={({ props, children }) => (
-                <div
-                  onMouseDown={props.onMouseDown}
-                  onTouchStart={props.onTouchStart}
-                  style={{
-                    ...props.style,
-                    height: '36px',
-                    display: 'flex',
-                    width: '100%'
-                  }}
-                >
+            {currentSong && duration > 0 && (
+              <Range
+                values={[currentTime]}
+                step={1}
+                min={0}
+                max={duration}
+                onChange={handleSeek}
+                onFinalChange={() => setIsSeeking(false)}
+                renderTrack={({ props, children }) => (
                   <div
-                    ref={props.ref}
+                    onMouseDown={props.onMouseDown}
+                    onTouchStart={props.onTouchStart}
                     style={{
-                      height: '5px',
-                      width: '100%',
-                      borderRadius: '4px',
-                      background: getTrackBackground({
-                        values: [currentTime],
-                        colors: ['#548BF4', '#ccc'],
-                        min: 0,
-                        max: duration
-                      }),
-                      alignSelf: 'center'
+                      ...props.style,
+                      height: '36px',
+                      display: 'flex',
+                      width: '100%'
                     }}
                   >
-                    {children}
+                    <div
+                      ref={props.ref}
+                      style={{
+                        height: '5px',
+                        width: '100%',
+                        borderRadius: '4px',
+                        background: getTrackBackground({
+                          values: [currentTime],
+                          colors: ['#548BF4', '#ccc'],
+                          min: 0,
+                          max: duration
+                        }),
+                        alignSelf: 'center'
+                      }}
+                    >
+                      {children}
+                    </div>
                   </div>
-                </div>
-              )}
-              renderThumb={({ props, isDragged }) => (
-                <div
-                  {...props}
-                  style={{
-                    ...props.style,
-                    height: '12px',
-                    width: '12px',
-                    borderRadius: '1px',
-                    backgroundColor: '#FFF',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    boxShadow: '0px 2px 6px #AAA'
-                  }}
-                >
+                )}
+                renderThumb={({ props, isDragged }) => (
                   <div
+                    {...props}
                     style={{
-                      height: '5px',
-                      width: '5px',
-                      backgroundColor: isDragged ? '#548BF4' : '#CCC'
+                      ...props.style,
+                      height: '12px',
+                      width: '12px',
+                      borderRadius: '1px',
+                      backgroundColor: '#FFF',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      boxShadow: '0px 2px 6px #AAA'
                     }}
-                  />
-                </div>
-              )}
-            />
+                  >
+                    <div
+                      style={{
+                        height: '5px',
+                        width: '5px',
+                        backgroundColor: isDragged ? '#548BF4' : '#CCC'
+                      }}
+                    />
+                  </div>
+                )}
+              />
+            )}
             <div className="flex justify-between text-sm mt-1">
               <span>{formatTime(currentTime)}</span>
               <span>{formatTime(duration)}</span>
             </div>
           </div>
           <div className="flex justify-between items-center mt-2">
-            <h3 className="font-medium">{currentSong.title}</h3>
+            <h3 className="font-medium">{decodeHtmlEntities(currentSong.title)}</h3>
             <div className="flex items-center gap-2">
               <Button onClick={() => handleSeek([Math.max(0, currentTime - 10)])}>
                 <SkipBack className="h-4 w-4" />
@@ -505,13 +513,13 @@ export default function YouTubePlaylistCreator() {
                         <div className="flex items-center gap-2">
                           <Image 
   src={song.thumbnail} 
-  alt={song.title} 
+  alt={decodeHtmlEntities(song.title)} 
   width={48}  // This corresponds to w-12 (12 * 4px)
   height={36} // This corresponds to h-9 (9 * 4px)
   className="object-cover rounded" 
 />
                           <Music className="h-4 w-4 text-primary" />
-                          <span className="font-medium line-clamp-1">{song.title}</span>
+                          <span className="font-medium line-clamp-1">{decodeHtmlEntities(song.title)}</span>
                         </div>
                         <Button variant="ghost" size="sm" onClick={() => removeFromPlaylist(song.playlistId)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -535,3 +543,5 @@ export default function YouTubePlaylistCreator() {
     </div>
   )
 }
+
+export default YouTubePlaylistCreator
