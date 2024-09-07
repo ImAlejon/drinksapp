@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Search, PlusCircle, Music, Trash2, Play, Pause, SkipBack, SkipForward } from 'lucide-react'
@@ -11,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'react-qr-code'
 import { Html5QrcodeScanner } from 'html5-qrcode'
+import Image from 'next/image'
 
 // Initialize Supabase client
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
@@ -356,7 +358,13 @@ export default function YouTubePlaylistCreator() {
           {searchResults.map(video => (
             <Card key={video.id}>
               <CardContent className="p-4 flex items-center gap-4">
-                <img src={video.thumbnail} alt={video.title} className="w-24 h-18 object-cover rounded" />
+                <Image 
+  src={video.thumbnail} 
+  alt={video.title} 
+  width={120} 
+  height={90} 
+  className="w-full h-auto" 
+/>
                 <div className="flex-grow">
                   <h3 className="font-medium line-clamp-2">{video.title}</h3>
                   <Button onClick={() => addToPlaylist(video)} size="sm" className="mt-2">
@@ -495,7 +503,13 @@ export default function YouTubePlaylistCreator() {
                         className="flex items-center justify-between bg-gray-100 p-2 rounded"
                       >
                         <div className="flex items-center gap-2">
-                          <img src={song.thumbnail} alt={song.title} className="w-12 h-9 object-cover rounded" />
+                          <Image 
+  src={song.thumbnail} 
+  alt={song.title} 
+  width={48}  // This corresponds to w-12 (12 * 4px)
+  height={36} // This corresponds to h-9 (9 * 4px)
+  className="object-cover rounded" 
+/>
                           <Music className="h-4 w-4 text-primary" />
                           <span className="font-medium line-clamp-1">{song.title}</span>
                         </div>
