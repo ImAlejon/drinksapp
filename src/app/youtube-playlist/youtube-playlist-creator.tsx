@@ -27,7 +27,7 @@ interface Song extends Video {
   playlistId: string
 }
 
-function decodeHtmlEntities(text: string): string {
+const decodeHtmlEntities = (text: string): string => {
   const textarea = document.createElement('textarea');
   textarea.innerHTML = text;
   return textarea.value;
@@ -49,15 +49,60 @@ const YouTubePlaylistCreator: React.FC = () => {
   const playerRef = useRef<any>(null)
   const [showScanner, setShowScanner] = useState(false)
   const qrCodeRef = useRef<HTMLDivElement>(null)
+  const lastUpdateTime = useRef(0)
+  const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
-    // Remove the automatic session ID generation
-    const storedSessionId = sessionStorage.getItem('playlistSessionId')
-    if (storedSessionId) {
-      setSessionId(storedSessionId)
-      fetchPlaylist(storedSessionId)
-      fetchCurrentSong(storedSessionId)
+    const initializeSession = async () => {
+      if (sessionId) {
+        const { data: playbackState, error: playbackError } = await supabase
+          .from('playback_states')
+          .select('*')
+          .eq('session_id', sessionId)
+          .single()
+
+        if (playbackError) {
+          console.error('Error fetching playback state:', playbackError)
+        } else if (playbackState) {
+          setIsPlaying(playbackState.is_playing)
+          setCurrentTime(playbackState.current_time)
+        }
+
+        const { data: currentSongData, error: currentSongError } = await supabase
+          .from('current_songs')
+          .select('*')
+          .eq('session_id', sessionId)
+          .single()
+
+        if (currentSongError) {
+          console.error('Error fetching current song:', currentSongError)
+        } else if (currentSongData) {
+          setCurrentSong(currentSongData.song)
+        }
+
+        setIsInitialized(true)
+      }
     }
+
+    initializeSession()
+
+    const playbackStateChannel = supabase.channel(`playback_state:${sessionId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'playback_states' }, payload => {
+        if (payload.new && 'is_playing' in payload.new && 'current_time' in payload.new) {
+          setIsPlaying(payload.new.is_playing)
+          if (!isSeeking && playerRef.current) {
+            const currentPlayerTime = playerRef.current.getCurrentTime()
+            const newTime = payload.new.current_time
+            // Only seek if the difference is more than 3 seconds
+            if (Math.abs(currentPlayerTime - newTime) > 3) {
+              playerRef.current.seekTo(newTime)
+              setCurrentTime(newTime)
+            }
+          }
+          payload.new.is_playing ? playerRef.current?.playVideo() : playerRef.current?.pauseVideo()
+        }
+      })
+      .subscribe()
 
     const playlistChannel = supabase.channel(`playlist:${sessionId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'playlists' }, (payload) => {
@@ -80,10 +125,11 @@ const YouTubePlaylistCreator: React.FC = () => {
       .subscribe()
 
     return () => {
+      playbackStateChannel.unsubscribe()
       playlistChannel.unsubscribe()
       currentSongChannel.unsubscribe()
     }
-  }, [sessionId])
+  }, [sessionId, isSeeking])
 
   useEffect(() => {
     let scanner: Html5QrcodeScanner | null = null;
@@ -241,39 +287,73 @@ const YouTubePlaylistCreator: React.FC = () => {
   const onPlayerReady = (event: any) => {
     playerRef.current = event.target
     setDuration(event.target.getDuration())
+    if (isInitialized && currentTime > 0) {
+      event.target.seekTo(currentTime)
+      if (isPlaying) {
+        event.target.playVideo()
+      }
+    }
   }
 
   const onPlayerStateChange = (event: any) => {
-    if (event.data === YouTube.PlayerState.ENDED) {
-      playNextSong()
-    } else if (event.data === YouTube.PlayerState.PLAYING) {
+    if (event.data === YouTube.PlayerState.PLAYING) {
       setIsPlaying(true)
-      startTimeUpdate()
+      updatePlaybackState(true, event.target.getCurrentTime())
     } else if (event.data === YouTube.PlayerState.PAUSED) {
       setIsPlaying(false)
-      stopTimeUpdate()
+      updatePlaybackState(false, event.target.getCurrentTime())
+    } else if (event.data === YouTube.PlayerState.ENDED) {
+      setIsPlaying(false)
+      setCurrentTime(0)
+      updatePlaybackState(false, 0)
+      skipCurrentSong() // Automatically play the next song
     }
   }
 
-  const startTimeUpdate = () => {
-    const interval = setInterval(() => {
-      if (playerRef.current && !isSeeking) {
-        setCurrentTime(playerRef.current.getCurrentTime())
-      }
-    }, 1000)
-    return () => clearInterval(interval)
-  }
-
-  const stopTimeUpdate = () => {
-    // Clear any existing interval
+  const updatePlaybackState = async (newPlayingState: boolean, newTime: number) => {
+    const now = Date.now()
+    if (sessionId && (now - lastUpdateTime.current > 3000 || newPlayingState !== isPlaying)) {
+      await supabase
+        .from('playback_states')
+        .upsert({ session_id: sessionId, is_playing: newPlayingState, current_time: newTime })
+      lastUpdateTime.current = now
+    }
   }
 
   const handleSeek = useCallback((values: number[]) => {
+    setIsSeeking(true)
     setCurrentTime(values[0])
-    if (playerRef.current) {
-      playerRef.current.seekTo(values[0])
-    }
   }, [])
+
+  const handleSeekEnd = useCallback(async (values: number[]) => {
+    setIsSeeking(false)
+    if (playerRef.current) {
+      const newTime = values[0]
+      playerRef.current.seekTo(newTime)
+      await updatePlaybackState(isPlaying, newTime)
+    }
+  }, [isPlaying, updatePlaybackState])
+
+  const handleSkip = useCallback(async (skipAmount: number) => {
+    if (playerRef.current) {
+      const newTime = Math.max(0, Math.min(playerRef.current.getDuration(), currentTime + skipAmount))
+      playerRef.current.seekTo(newTime)
+      setCurrentTime(newTime)
+      await updatePlaybackState(isPlaying, newTime)
+    }
+  }, [currentTime, isPlaying, updatePlaybackState])
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (playerRef.current && !isSeeking && isPlaying) {
+        const newTime = Math.min(playerRef.current.getCurrentTime(), duration)
+        setCurrentTime(newTime)
+        await updatePlaybackState(isPlaying, newTime)
+      }
+    }, 5000) // Update every 5 seconds to reduce database load
+
+    return () => clearInterval(interval)
+  }, [isPlaying, isSeeking, duration])
 
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60)
@@ -301,6 +381,10 @@ const YouTubePlaylistCreator: React.FC = () => {
       fetchCurrentSong(sessionInputId)
       setSessionInputId('') // Clear the input after setting
     }
+  }
+
+  const skipCurrentSong = async () => {
+    await playNextSong()
   }
 
   return (
@@ -365,12 +449,12 @@ const YouTubePlaylistCreator: React.FC = () => {
             <Card key={video.id}>
               <CardContent className="p-4 flex items-center gap-4">
                 <Image 
-  src={video.thumbnail} 
-  alt={decodeHtmlEntities(video.title)} 
-  width={120} 
-  height={90} 
-  className="w-full h-auto" 
-/>
+                  src={video.thumbnail} 
+                  alt={decodeHtmlEntities(video.title)} 
+                  width={120} 
+                  height={90} 
+                  className="w-full h-auto" 
+                />
                 <div className="flex-grow">
                   <h3 className="font-medium line-clamp-2">{decodeHtmlEntities(video.title)}</h3>
                   <Button onClick={() => addToPlaylist(video)} size="sm" className="mt-2">
@@ -385,7 +469,7 @@ const YouTubePlaylistCreator: React.FC = () => {
       )}
 
       <h2 className="text-xl font-semibold mb-4">Now Playing</h2>
-      {currentSong ? (
+      {currentSong && duration > 0 && (
         <div className="mb-4">
           <YouTube
             videoId={currentSong.id}
@@ -405,70 +489,68 @@ const YouTubePlaylistCreator: React.FC = () => {
             onStateChange={onPlayerStateChange}
           />
           <div className="mt-4">
-            {currentSong && duration > 0 && (
-              <Range
-                values={[currentTime]}
-                step={1}
-                min={0}
-                max={duration}
-                onChange={handleSeek}
-                onFinalChange={() => setIsSeeking(false)}
-                renderTrack={({ props, children }) => (
+            <Range
+              values={[Math.min(currentTime, duration)]}
+              step={1}
+              min={0}
+              max={duration}
+              onChange={handleSeek}
+              onFinalChange={handleSeekEnd}
+              renderTrack={({ props, children }) => (
+                <div
+                  onMouseDown={props.onMouseDown}
+                  onTouchStart={props.onTouchStart}
+                  style={{
+                    ...props.style,
+                    height: '36px',
+                    display: 'flex',
+                    width: '100%'
+                  }}
+                >
                   <div
-                    onMouseDown={props.onMouseDown}
-                    onTouchStart={props.onTouchStart}
+                    ref={props.ref}
                     style={{
-                      ...props.style,
-                      height: '36px',
-                      display: 'flex',
-                      width: '100%'
+                      height: '5px',
+                      width: '100%',
+                      borderRadius: '4px',
+                      background: getTrackBackground({
+                        values: [currentTime],
+                        colors: ['#548BF4', '#ccc'],
+                        min: 0,
+                        max: duration
+                      }),
+                      alignSelf: 'center'
                     }}
                   >
-                    <div
-                      ref={props.ref}
-                      style={{
-                        height: '5px',
-                        width: '100%',
-                        borderRadius: '4px',
-                        background: getTrackBackground({
-                          values: [currentTime],
-                          colors: ['#548BF4', '#ccc'],
-                          min: 0,
-                          max: duration
-                        }),
-                        alignSelf: 'center'
-                      }}
-                    >
-                      {children}
-                    </div>
+                    {children}
                   </div>
-                )}
-                renderThumb={({ props, isDragged }) => (
+                </div>
+              )}
+              renderThumb={({ props, isDragged }) => (
+                <div
+                  {...props}
+                  style={{
+                    ...props.style,
+                    height: '12px',
+                    width: '12px',
+                    borderRadius: '1px',
+                    backgroundColor: '#FFF',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    boxShadow: '0px 2px 6px #AAA'
+                  }}
+                >
                   <div
-                    {...props}
                     style={{
-                      ...props.style,
-                      height: '12px',
-                      width: '12px',
-                      borderRadius: '1px',
-                      backgroundColor: '#FFF',
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      boxShadow: '0px 2px 6px #AAA'
+                      height: '5px',
+                      width: '5px',
+                      backgroundColor: isDragged ? '#548BF4' : '#CCC'
                     }}
-                  >
-                    <div
-                      style={{
-                        height: '5px',
-                        width: '5px',
-                        backgroundColor: isDragged ? '#548BF4' : '#CCC'
-                      }}
-                    />
-                  </div>
-                )}
-              />
-            )}
+                  />
+                </div>
+              )}
+            />
             <div className="flex justify-between text-sm mt-1">
               <span>{formatTime(currentTime)}</span>
               <span>{formatTime(duration)}</span>
@@ -477,20 +559,22 @@ const YouTubePlaylistCreator: React.FC = () => {
           <div className="flex justify-between items-center mt-2">
             <h3 className="font-medium">{decodeHtmlEntities(currentSong.title)}</h3>
             <div className="flex items-center gap-2">
-              <Button onClick={() => handleSeek([Math.max(0, currentTime - 10)])}>
+              <Button onClick={() => handleSkip(-10)}>
                 <SkipBack className="h-4 w-4" />
               </Button>
               <Button onClick={togglePlayPause}>
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               </Button>
-              <Button onClick={() => handleSeek([Math.min(duration, currentTime + 10)])}>
+              <Button onClick={() => handleSkip(10)}>
                 <SkipForward className="h-4 w-4" />
+              </Button>
+              <Button onClick={skipCurrentSong}>
+                <SkipForward className="h-4 w-4" />
+                Skip
               </Button>
             </div>
           </div>
         </div>
-      ) : (
-        <p className="text-center text-gray-500 mb-4">No song is currently playing</p>
       )}
 
       <h2 className="text-xl font-semibold mb-4">Your Playlist</h2>
@@ -512,12 +596,12 @@ const YouTubePlaylistCreator: React.FC = () => {
                       >
                         <div className="flex items-center gap-2">
                           <Image 
-  src={song.thumbnail} 
-  alt={decodeHtmlEntities(song.title)} 
-  width={48}  // This corresponds to w-12 (12 * 4px)
-  height={36} // This corresponds to h-9 (9 * 4px)
-  className="object-cover rounded" 
-/>
+                            src={song.thumbnail} 
+                            alt={decodeHtmlEntities(song.title)} 
+                            width={48}  // This corresponds to w-12 (12 * 4px)
+                            height={36} // This corresponds to h-9 (9 * 4px)
+                            className="object-cover rounded" 
+                          />
                           <Music className="h-4 w-4 text-primary" />
                           <span className="font-medium line-clamp-1">{decodeHtmlEntities(song.title)}</span>
                         </div>
