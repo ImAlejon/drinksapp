@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, PlusCircle, Music, Trash2, Play, Pause, SkipBack, SkipForward } from 'lucide-react'
+import { Search, PlusCircle, Music, Trash2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import YouTube from 'react-youtube'
 import { Range, getTrackBackground } from 'react-range'
@@ -51,6 +51,8 @@ const YouTubePlaylistCreator: React.FC = () => {
   const qrCodeRef = useRef<HTMLDivElement>(null)
   const lastUpdateTime = useRef(0)
   const [isInitialized, setIsInitialized] = useState(false)
+  const [volume, setVolume] = useState(100)
+  const [prevVolume, setPrevVolume] = useState(100)
 
   useEffect(() => {
     const initializeSession = async () => {
@@ -287,6 +289,7 @@ const YouTubePlaylistCreator: React.FC = () => {
   const onPlayerReady = (event: any) => {
     playerRef.current = event.target
     setDuration(event.target.getDuration())
+    event.target.setVolume(volume) // Set initial volume
     if (isInitialized && currentTime > 0) {
       event.target.seekTo(currentTime)
       if (isPlaying) {
@@ -386,6 +389,71 @@ const YouTubePlaylistCreator: React.FC = () => {
   const skipCurrentSong = async () => {
     await playNextSong()
   }
+
+  const handleVolumeChange = useCallback((newVolume: number) => {
+    setVolume(newVolume)
+    if (playerRef.current) {
+      playerRef.current.setVolume(newVolume)
+    }
+  }, [])
+
+  const toggleMute = useCallback(() => {
+    if (volume > 0) {
+      setPrevVolume(volume)
+      setVolume(0)
+      if (playerRef.current) {
+        playerRef.current.setVolume(0)
+      }
+    } else {
+      setVolume(prevVolume)
+      if (playerRef.current) {
+        playerRef.current.setVolume(prevVolume)
+      }
+    }
+  }, [volume, prevVolume])
+
+  const VolumeControl: React.FC<{
+    volume: number;
+    onVolumeChange: (volume: number) => void;
+    onToggleMute: () => void;
+  }> = ({ volume, onVolumeChange, onToggleMute }) => {
+    return (
+      <div className="flex items-center gap-2 ml-4">
+        <Button onClick={onToggleMute} variant="ghost" size="sm">
+          {volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+        </Button>
+        <div className="w-24 relative">
+          {typeof window !== 'undefined' && (
+            <Range
+              values={[volume]}
+              step={1}
+              min={0}
+              max={100}
+              onChange={(values) => onVolumeChange(values[0])}
+              renderTrack={({ props, children }) => (
+                <div
+                  {...props}
+                  className="h-1 w-full bg-gray-200 rounded-full absolute top-1/2 transform -translate-y-1/2"
+                >
+                  <div
+                    className="h-full bg-blue-500 rounded-full absolute left-0 top-0"
+                    style={{ width: `${volume}%` }}
+                  />
+                  {children}
+                </div>
+              )}
+              renderThumb={({ props }) => (
+                <div
+                  {...props}
+                  className="h-3 w-3 bg-blue-500 rounded-full"
+                />
+              )}
+            />
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
@@ -572,6 +640,11 @@ const YouTubePlaylistCreator: React.FC = () => {
                 <SkipForward className="h-4 w-4" />
                 Skip
               </Button>
+              <VolumeControl
+                volume={volume}
+                onVolumeChange={handleVolumeChange}
+                onToggleMute={toggleMute}
+              />
             </div>
           </div>
         </div>
