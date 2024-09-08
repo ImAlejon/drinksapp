@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
+import SupabaseProvider from "@/components/SupabaseProvider";
 
 // Remove or comment out these lines if they're not used
 // const geistSans = Geist_sans({ subsets: ['latin'] })
@@ -14,23 +15,25 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>
-        <nav className="bg-gray-100 p-4">
-          <ul className="flex space-x-4">
-            <li>
-              <Link href="/" className="text-blue-500 hover:underline">
-                Home
-              </Link>
-            </li>
-            <li>
-              <Link href="/youtube-playlist" className="text-blue-500 hover:underline">
-                YouTube Playlist
-              </Link>
-            </li>
-          </ul>
-        </nav>
-        <main>{children}</main>
-      </body>
+      <SupabaseProvider>
+        <body>
+          <nav className="bg-gray-100 p-4">
+            <ul className="flex space-x-4">
+              <li>
+                <Link href="/" className="text-blue-500 hover:underline">
+                  Home
+                </Link>
+              </li>
+              <li>
+                <Link href="/youtube-playlist" className="text-blue-500 hover:underline">
+                  YouTube Playlist
+                </Link>
+              </li>
+            </ul>
+          </nav>
+          <main>{children}</main>
+        </body>
+      </SupabaseProvider>
     </html>
   )
 }
