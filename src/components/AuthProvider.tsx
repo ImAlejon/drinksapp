@@ -15,13 +15,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const checkUser = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession()
+        const { data: { session } } = await supabase.auth.getSession()
         if (error) throw error;
         
-        if (!session && pathname !== '/login') {
+        if (!session?.user && pathname !== '/login') {
           console.log("No session found, redirecting to login")
           router.push('/login')
-        } else if (session && pathname === '/login') {
+        } else if (session?.user && pathname === '/login') {
           console.log("Session found, redirecting to home")
           router.push('/')
         }
@@ -34,7 +34,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     }
     checkUser()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN' && pathname === '/login') {
         router.push('/')
       } else if (event === 'SIGNED_OUT') {
@@ -45,7 +45,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     return () => {
       subscription.unsubscribe()
     }
-  }, [supabase, router, pathname])
+  }, [supabase, router, pathname, error]) // Add 'error' to the dependency array
 
   if (isLoading && pathname !== '/login') {
     return <div>Loading... Please wait.</div>
