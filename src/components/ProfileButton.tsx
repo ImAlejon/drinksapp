@@ -1,49 +1,59 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { useSupabase } from './SupabaseProvider'
+import { useState, useEffect } from 'react';
+import { useSupabase } from './SupabaseProvider';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 
 export default function ProfileButton() {
-  const router = useRouter()
-  const { supabase } = useSupabase()
-  const [isLoading, setIsLoading] = useState(false)
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+	const { supabase } = useSupabase();
+	const router = useRouter();
+	const [user, setUser] = useState<any>(null);
 
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setIsLoggedIn(!!session)
-    }
-    checkUser()
+	useEffect(() => {
+		const fetchUser = async () => {
+			const { data: { user } } = await supabase.auth.getUser();
+			setUser(user);
+		};
+		fetchUser();
+	}, [supabase]);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setIsLoggedIn(!!session)
-    })
+	const handleLogout = async () => {
+		await supabase.auth.signOut();
+		router.push('/login');
+	};
 
-    return () => subscription.unsubscribe()
-  }, [supabase.auth])
+	if (!user) return null;
 
-  const handleAction = async () => {
-    setIsLoading(true)
-    try {
-      if (isLoggedIn) {
-        await supabase.auth.signOut()
-        router.push('/login')
-      } else {
-        router.push('/login')
-      }
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  return (
-    <Button onClick={handleAction} disabled={isLoading}>
-      {isLoading ? 'Loading...' : isLoggedIn ? 'Logout' : 'Login'}
-    </Button>
-  )
+	return (
+		<Popover>
+			<PopoverTrigger asChild>
+				<Button variant="ghost" className="h-8 w-8 rounded-full p-0">
+					<Image
+						src={user.user_metadata.avatar_url || '/default-avatar.png'}
+						alt="Profile"
+						width={32}
+						height={32}
+						className="h-full w-full rounded-full object-cover"
+					/>
+				</Button>
+			</PopoverTrigger>
+			<PopoverContent className="w-56" align="end">
+				<div className="grid gap-4">
+					<div className="px-2 py-1 text-sm text-gray-700">
+						{user.email}
+					</div>
+					<Button
+						onClick={handleLogout}
+						variant="ghost"
+						className="w-full justify-start text-sm font-normal"
+					>
+						Logout
+					</Button>
+				</div>
+			</PopoverContent>
+		</Popover>
+	);
 }
