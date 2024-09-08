@@ -34,7 +34,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     checkUser()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN') {
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
