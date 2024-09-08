@@ -16,7 +16,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const checkUser = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        if (error) throw error;
         
         if (!session?.user && pathname !== '/login') {
           console.log("No session found, redirecting to login")
@@ -32,22 +31,29 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         setIsLoading(false)
       }
     }
+
     checkUser()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' && pathname === '/login') {
-        router.push('/')
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        if (code) {
+          router.push('/youtube-playlist');
+        }
+        setIsLoading(false)
       } else if (event === 'SIGNED_OUT') {
         router.push('/login')
+        setIsLoading(false)
       }
-    })
+    });
 
     return () => {
       subscription.unsubscribe()
     }
-  }, [supabase, router, pathname, error]) // Add 'error' to the dependency array
+  }, [supabase, router, pathname])
 
-  if (isLoading && pathname !== '/login') {
+  if (isLoading) {
     return <div>Loading... Please wait.</div>
   }
 
