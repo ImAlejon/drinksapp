@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
 import SupabaseProvider from "@/components/SupabaseProvider";
+import AuthProvider from "@/components/AuthProvider";
+import ProfileButton from "@/components/ProfileButton";
 
 // Remove or comment out these lines if they're not used
 // const geistSans = Geist_sans({ subsets: ['latin'] })
@@ -15,25 +17,30 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <SupabaseProvider>
-        <body>
-          <nav className="bg-gray-100 p-4">
-            <ul className="flex space-x-4">
-              <li>
-                <Link href="/" className="text-blue-500 hover:underline">
-                  Home
-                </Link>
-              </li>
-              <li>
-                <Link href="/youtube-playlist" className="text-blue-500 hover:underline">
-                  YouTube Playlist
-                </Link>
-              </li>
-            </ul>
-          </nav>
-          <main>{children}</main>
-        </body>
-      </SupabaseProvider>
+      <body>
+        <SupabaseProvider>
+          <AuthProvider>
+            <nav className="bg-gray-100 p-4">
+              <ul className="flex items-center">
+                <li>
+                  <Link href="/" className="text-blue-500 hover:underline">
+                    Home
+                  </Link>
+                </li>
+                <li className="ml-4">
+                  <Link href="/youtube-playlist" className="text-blue-500 hover:underline">
+                    YouTube Playlist
+                  </Link>
+                </li>
+                <li className="ml-auto">
+                  <ProfileButton />
+                </li>
+              </ul>
+            </nav>
+            <main>{children}</main>
+          </AuthProvider>
+        </SupabaseProvider>
+      </body>
     </html>
   )
 }
