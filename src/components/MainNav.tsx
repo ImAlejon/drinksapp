@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from 'next/navigation'
+import { Session } from '@supabase/supabase-js'
 
 import {
   NavigationMenu,
@@ -17,7 +18,7 @@ import ProfileButton from "./ProfileButton"
 export function MainNav() {
   const pathname = usePathname()
   const { supabase } = useSupabase()
-  const [session, setSession] = React.useState<any>(null)
+  const [session, setSession] = React.useState<Session | null>(null)
 
   React.useEffect(() => {
     const fetchSession = async () => {

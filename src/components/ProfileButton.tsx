@@ -4,13 +4,18 @@ import { useState, useEffect } from 'react';
 import { useSupabase } from './SupabaseProvider';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { User } from '@supabase/supabase-js';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 
 export default function ProfileButton() {
 	const { supabase } = useSupabase();
 	const router = useRouter();
-	const [user, setUser] = useState<any>(null);
+	const [user, setUser] = useState<User | null>(null);
 
 	useEffect(() => {
 		const fetchUser = async () => {
@@ -30,29 +35,28 @@ export default function ProfileButton() {
 	return (
 		<Popover>
 			<PopoverTrigger asChild>
-				<Button variant="ghost" className="h-8 w-8 rounded-full p-0">
+				<Button className="h-8 w-8 rounded-full p-0 overflow-hidden">
 					<Image
 						src={user.user_metadata.avatar_url || '/default-avatar.png'}
 						alt="Profile"
 						width={32}
 						height={32}
-						className="h-full w-full rounded-full object-cover"
+						className="h-full w-full object-cover"
 					/>
 				</Button>
 			</PopoverTrigger>
+
 			<PopoverContent className="w-56" align="end">
-				<div className="grid gap-4">
-					<div className="px-2 py-1 text-sm text-gray-700">
-						{user.email}
-					</div>
-					<Button
-						onClick={handleLogout}
-						variant="ghost"
-						className="w-full justify-start text-sm font-normal"
-					>
-						Logout
-					</Button>
+				<div className="mb-2 px-2 py-1 text-sm text-gray-700">
+					{user.email}
 				</div>
+				<Button
+					variant="ghost"
+					className="w-full justify-start"
+					onClick={handleLogout}
+				>
+					Logout
+				</Button>
 			</PopoverContent>
 		</Popover>
 	);
