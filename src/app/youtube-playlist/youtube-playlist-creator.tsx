@@ -5,7 +5,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Search, PlusCircle, Music, Trash2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import YouTube from 'react-youtube'
-import { Range} from 'react-range'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { createClient } from '@supabase/supabase-js'
@@ -495,38 +494,19 @@ const addToPlaylist = async (video: Video) => {
     onToggleMute: () => void;
   }> = ({ volume, onVolumeChange, onToggleMute }) => {
     return (
-      <div className="flex items-center gap-2 ml-4">
+      <div className="flex items-center gap-2">
         <Button onClick={onToggleMute} variant="ghost" size="sm">
           {volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
         </Button>
-        <div className="w-24 relative">
-          {typeof window !== 'undefined' && (
-            <Range
-              values={[volume]}
-              step={1}
-              min={0}
-              max={100}
-              onChange={(values) => onVolumeChange(values[0])}
-              renderTrack={({ props, children }) => (
-                <div
-                  {...props}
-                  className="h-1 w-full bg-gray-200 rounded-full absolute top-1/2 transform -translate-y-1/2"
-                >
-                  <div
-                    className="h-full bg-blue-500 rounded-full absolute left-0 top-0"
-                    style={{ width: `${volume}%` }}
-                  />
-                  {children}
-                </div>
-              )}
-              renderThumb={({ props }) => (
-                <div
-                  {...props}
-                  className="h-3 w-3 bg-blue-500 rounded-full"
-                />
-              )}
-            />
-          )}
+        <div className="w-20 sm:w-24">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={volume}
+            onChange={(e) => onVolumeChange(Number(e.target.value))}
+            className="w-full"
+          />
         </div>
       </div>
     );
@@ -643,31 +623,15 @@ const addToPlaylist = async (video: Video) => {
             />
           </div>
           <div className="mt-4">
-            <Range
-              values={[progress]}
-              step={0.1}
-              min={0}
-              max={100}
-              onChange={(values) => handleSeek(values[0])}
-              onFinalChange={(values) => handleSeekEnd(values[0])}
-              renderTrack={({ props, children }) => (
-                <div
-                  {...props}
-                  className="h-2 w-full bg-gray-200 rounded-full"
-                >
-                  <div
-                    className="h-full bg-blue-500 rounded-full"
-                    style={{ width: `${progress}%` }}
-                  />
-                  {children}
-                </div>
-              )}
-              renderThumb={({ props }) => (
-                <div
-                  {...props}
-                  className="h-4 w-4 bg-blue-500 rounded-full shadow"
-                />
-              )}
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="0.1"
+              value={progress}
+              onChange={(e) => handleSeek(parseFloat(e.target.value))}
+              onMouseUp={(e) => handleSeekEnd(parseFloat((e.target as HTMLInputElement).value))}
+              className="w-full"
             />
             <div className="flex justify-between text-sm mt-1">
               <span>{formatTime(currentTimeRef.current)}</span>
