@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import SupabaseProvider from '@/components/SupabaseProvider';
+import AuthProvider from '@/components/AuthProvider';
 import { MainNav } from "@/components/MainNav";
 
 export const metadata: Metadata = {
@@ -13,8 +14,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <SupabaseProvider>
-          <MainNav />
-          {children}
+          <AuthProvider>
+            <MainNav />
+            {children}
+          </AuthProvider>
         </SupabaseProvider>
       </body>
     </html>
