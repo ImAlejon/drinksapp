@@ -7,13 +7,11 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import YouTube from 'react-youtube'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { createClient } from '@supabase/supabase-js'
 import QRCode from 'react-qr-code'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import Image from 'next/image'
-
-// Initialize Supabase client
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+import { useSession, User } from '@supabase/auth-helpers-react'
+import { useSupabase } from '@/components/SupabaseProvider'
 
 interface Video {
   id: string
@@ -32,6 +30,9 @@ const decodeHtmlEntities = (text: string): string => {
 }
 
 const YouTubePlaylistCreator: React.FC = () => {
+  const session = useSession()
+  const { supabase } = useSupabase()
+
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Video[]>([])
   const [playlist, setPlaylist] = useState<Song[]>([])
@@ -54,6 +55,16 @@ const YouTubePlaylistCreator: React.FC = () => {
   const [playlistName, setPlaylistName] = useState('')
   const [progress, setProgress] = useState(0)
   const currentTimeRef = useRef(0)
+  const [isOwner, setIsOwner] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user || null)
+    }
+    getUser()
+  }, [supabase])
 
   useEffect(() => {
     const initializeSession = async () => {
@@ -140,7 +151,7 @@ const YouTubePlaylistCreator: React.FC = () => {
       playlistChannel.unsubscribe()
       currentSongChannel.unsubscribe()
     }
-  }, [sessionId, isSeeking])
+  }, [sessionId, isSeeking, supabase])
 
   useEffect(() => {
     let scanner: Html5QrcodeScanner | null = null;
@@ -166,93 +177,97 @@ const YouTubePlaylistCreator: React.FC = () => {
     console.error(error);
   };
 
-const createPlaylist = async (e: React.FormEvent) => {
-  e.preventDefault()
-  if (!playlistName) return
+  const createPlaylist = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!playlistName || !user) return
 
-  try {
-    const response = await fetch('/api/playlists', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name: playlistName }),
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      if (data.error === 'User already has a playlist' && data.sessionId) {
-        setSessionId(data.sessionId)
-        await fetchPlaylist(data.sessionId)
-        setPlaylistName('')
-        setError('You already have a playlist. Loaded existing playlist.')
-      } else {
-        throw new Error(`Failed to create playlist: ${data.error || response.statusText}`)
-      }
-    } else {
-      console.log('Playlist created:', data)
-      
-      if (!data.sessionId || !data.playlist) {
-        throw new Error('Invalid response from server')
-      }
-      
-      setSessionId(data.sessionId)
-      setPlaylistName('')
-      fetchPlaylist(data.sessionId)
-    }
-  } catch (error) {
-    console.error('Error creating playlist:', error)
-    setError('Failed to create playlist. Please try again.')
-  }
-}
- 
-  const fetchPlaylist = async (sessionId: string) => {
-    const response = await fetch(`/api/playlists?sessionId=${sessionId}`)
-    if (response.ok) {
-      const data = await response.json()
-      setPlaylist(data.songs || [])
-    } else {
-      console.error('Error fetching playlist:', await response.text())
-    }
-  }
-
-const addToPlaylist = async (video: Video) => {
-  if (sessionId) {
-    const newSong: Song = {
-      ...video,
-      playlistId: `playlist-${video.id}`,
-      thumbnail: `https://img.youtube.com/vi/${video.id}/mqdefault.jpg`
-    }
-    const updatedPlaylist = [...playlist, newSong]
-    
     try {
-      const response = await fetch(`/api/playlists?sessionId=${sessionId}`, {
-        method: 'PATCH',
+      const response = await fetch('/api/playlists', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ songs: updatedPlaylist }),
+        body: JSON.stringify({ name: playlistName }),
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
       const data = await response.json()
-      setPlaylist(data.songs)
-    } catch (error) {
-      console.error('Error adding song to playlist:', error)
-      setError('Failed to add song to playlist. Please try again.')
-    }
-  } else {
-    console.error('No session ID available')
-    setError('No active playlist session. Please create or join a playlist.')
-  }
-}
+      console.log('Playlist response:', data)
 
-   const removeFromPlaylist = async (playlistId: string) => {
-    if (sessionId) {
+      if (response.ok) {
+        setSessionId(data.sessionId)
+        setIsOwner(true)
+        setPlaylistName('')
+        await fetchPlaylist(data.sessionId)
+      } else {
+        throw new Error(data.error || 'Failed to create playlist')
+      }
+    } catch (error) {
+      console.error('Error creating playlist:', error)
+      setError('Failed to create playlist. Please try again.')
+    }
+  }
+
+  const fetchPlaylist = async (sessionId: string) => {
+    try {
+      const response = await fetch(`/api/playlists?sessionId=${sessionId}`)
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Fetched playlist data:', data)
+        setPlaylist(data.songs || [])
+        
+        // Check ownership here as well
+        const isOwner = user?.id === data.host_id
+        console.log('Fetch playlist - Is owner:', isOwner)
+        setIsOwner(isOwner)
+      } else {
+        console.error('Error fetching playlist:', await response.text())
+      }
+    } catch (error) {
+      console.error('Error fetching playlist:', error)
+    }
+  }
+
+  const addToPlaylist = async (video: Video) => {
+    console.log('Adding to playlist. Is owner:', isOwner)
+    if (sessionId && isOwner) {
+      const newSong: Song = {
+        ...video,
+        playlistId: `playlist-${video.id}`,
+        thumbnail: `https://img.youtube.com/vi/${video.id}/mqdefault.jpg`
+      }
+      const updatedPlaylist = [...playlist, newSong]
+      
+      try {
+        const response = await fetch(`/api/playlists?sessionId=${sessionId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ songs: updatedPlaylist }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error}`)
+        }
+
+        const data = await response.json()
+        setPlaylist(data.songs)
+      } catch (error) {
+        console.error('Error adding song to playlist:', error)
+        setError('Failed to add song to playlist. Please try again.')
+      }
+    } else if (!isOwner) {
+      console.log('Not owner, cannot add to playlist')
+      setError('Only the playlist owner can add songs')
+    } else {
+      console.error('No session ID available')
+      setError('No active playlist session. Please create or join a playlist.')
+    }
+  }
+
+  const removeFromPlaylist = async (playlistId: string) => {
+    if (sessionId && isOwner) {
       const updatedPlaylist = playlist.filter(song => song.playlistId !== playlistId)
       
       const response = await fetch(`/api/playlists?sessionId=${sessionId}`, {
@@ -268,11 +283,13 @@ const addToPlaylist = async (video: Video) => {
       } else {
         console.error('Error removing song from playlist:', await response.text())
       }
+    } else if (!isOwner) {
+      setError('Only the playlist owner can remove songs')
     }
   }
 
   const onDragEnd = async (result: DropResult) => {
-    if (!result.destination || !sessionId) return;
+    if (!result.destination || !sessionId || !isOwner) return;
 
     const items = Array.from(playlist);
     const [reorderedItem] = items.splice(result.source.index, 1);
@@ -381,7 +398,7 @@ const addToPlaylist = async (video: Video) => {
         .upsert({ session_id: sessionId, is_playing: newPlayingState, current_time: newTime })
       lastUpdateTime.current = now
     }
-  }, [sessionId, isPlaying]);
+  }, [sessionId, isPlaying, supabase]);
 
   const handleSeek = useCallback((value: number) => {
     setIsSeeking(true);
@@ -512,6 +529,34 @@ const addToPlaylist = async (video: Video) => {
     );
   };
 
+  useEffect(() => {
+    const checkOwnership = async () => {
+      if (sessionId && user) {
+        console.log('Current user:', user)
+        const { data: playlist, error } = await supabase
+          .from('playlists')
+          .select('host_id')
+          .eq('session_id', sessionId)
+          .single()
+        
+        if (error) {
+          console.error('Error fetching playlist:', error)
+        }
+        
+        console.log('Playlist data:', playlist)
+        console.log('Session ID:', sessionId)
+
+        const isOwner = user.id === playlist?.host_id
+        console.log('Is owner:', isOwner)
+        setIsOwner(isOwner)
+      } else {
+        console.log('No session ID or user available')
+      }
+    }
+
+    checkOwnership()
+  }, [sessionId, user, supabase])
+
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-lg shadow-lg">
       <h1 className="text-2xl font-bold mb-4 text-center">YouTube Playlist Creator</h1>
@@ -561,51 +606,57 @@ const addToPlaylist = async (video: Video) => {
         </div>
       )}
 
-      <form onSubmit={searchYouTube} className="mb-6 flex gap-2">
-        <Input
-          type="text"
-          placeholder="Search for a song on YouTube"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          required
-          className="flex-grow"
-        />
-        <Button type="submit" disabled={isLoading}>
-          <Search className="mr-2 h-4 w-4" />
-          Search
-        </Button>
-      </form>
+      {isOwner ? (
+        <form onSubmit={searchYouTube} className="mb-6 flex gap-2">
+          <Input
+            type="text"
+            placeholder="Search for a song on YouTube"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            required
+            className="flex-grow"
+          />
+          <Button type="submit" disabled={isLoading}>
+            <Search className="mr-2 h-4 w-4" />
+            Search
+          </Button>
+        </form>
+      ) : (
+        <p>You are not the owner of this playlist.</p>
+      )}
 
       {error && <p className="text-red-500 mb-4">{error}</p>}
 
       {isLoading ? (
         <p className="text-center">Loading...</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
-          {searchResults.map(video => (
-            <div key={video.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-              <div className="relative h-0 pb-[56.25%]">
-                <Image
-                  src={`https://img.youtube.com/vi/${video.id}/mqdefault.jpg`}
-                  alt={decodeHtmlEntities(video.title)}
-                  width={320}
-                  height={180}
-                  className="absolute top-0 left-0 w-full h-full object-cover"
-                />
+        isOwner && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+            {searchResults.map(video => (
+              <div key={video.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                <div className="relative h-0 pb-[56.25%]">
+                  <Image
+                    src={`https://img.youtube.com/vi/${video.id}/mqdefault.jpg`}
+                    alt={decodeHtmlEntities(video.title)}
+                    width={320}
+                    height={180}
+                    className="absolute top-0 left-0 w-full h-full object-cover"
+                  />
+                </div>
+                <div className="p-4">
+                  <h3 className="font-medium text-sm mb-2 line-clamp-2">{decodeHtmlEntities(video.title)}</h3>
+                  <Button onClick={() => addToPlaylist(video)} size="sm" className="w-full">
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Add to Playlist
+                  </Button>
+                </div>
               </div>
-              <div className="p-4">
-                <h3 className="font-medium text-sm mb-2 line-clamp-2">{decodeHtmlEntities(video.title)}</h3>
-                <Button onClick={() => addToPlaylist(video)} size="sm" className="w-full">
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Add to Playlist
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )
       )}
 
-      {currentSong && (
+      {currentSong && isOwner && (
         <div className="mb-6 w-full max-w-full overflow-hidden">
           <div className="relative pt-[56.25%]"> {/* 16:9 aspect ratio */}
             <YouTube
@@ -637,29 +688,29 @@ const addToPlaylist = async (video: Video) => {
               <span>{formatTime(currentTimeRef.current)}</span>
               <span>{formatTime(duration)}</span>
             </div>
-          </div>
-          <div className="flex flex-wrap justify-between items-center mt-2">
-            <h3 className="font-medium text-sm mb-2 w-full">{decodeHtmlEntities(currentSong.title)}</h3>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <Button onClick={() => handleSkip(-10)} size="sm">
-                <SkipBack className="h-4 w-4" />
-              </Button>
-              <Button onClick={togglePlayPause} size="sm">
-                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              </Button>
-              <Button onClick={() => handleSkip(10)} size="sm">
-                <SkipForward className="h-4 w-4" />
-              </Button>
-              <Button onClick={skipCurrentSong} size="sm">
-                <SkipForward className="h-4 w-4" />
-                Skip
-              </Button>
+            <div className="flex flex-wrap justify-between items-center mt-2">
+              <h3 className="font-medium text-sm mb-2 w-full">{decodeHtmlEntities(currentSong.title)}</h3>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Button onClick={() => handleSkip(-10)} size="sm">
+                  <SkipBack className="h-4 w-4" />
+                </Button>
+                <Button onClick={togglePlayPause} size="sm">
+                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                </Button>
+                <Button onClick={() => handleSkip(10)} size="sm">
+                  <SkipForward className="h-4 w-4" />
+                </Button>
+                <Button onClick={skipCurrentSong} size="sm">
+                  <SkipForward className="h-4 w-4" />
+                  Skip
+                </Button>
+              </div>
+              <VolumeControl
+                volume={volume}
+                onVolumeChange={handleVolumeChange}
+                onToggleMute={toggleMute}
+              />
             </div>
-            <VolumeControl
-              volume={volume}
-              onVolumeChange={handleVolumeChange}
-              onToggleMute={toggleMute}
-            />
           </div>
         </div>
       )}
@@ -668,42 +719,56 @@ const addToPlaylist = async (video: Video) => {
       {playlist.length === 0 ? (
         <p className="text-center text-gray-500">Your playlist is empty. Add some songs!</p>
       ) : (
-        <DragDropContext onDragEnd={onDragEnd}>
-          <Droppable droppableId="playlist">
-            {(provided) => (
-              <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
-                {playlist.map((song, index) => (
-                  <Draggable key={song.playlistId} draggableId={song.playlistId} index={index}>
-                    {(provided) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                        className="flex items-center justify-between bg-gray-100 p-2 rounded"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Image 
-                            src={song.thumbnail} 
-                            alt={decodeHtmlEntities(song.title)} 
-                            width={48}
-                            height={36}
-                            className="object-cover rounded" 
-                          />
-                          <Music className="h-4 w-4 text-primary" />
-                          <span className="font-medium line-clamp-1">{decodeHtmlEntities(song.title)}</span>
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={() => removeFromPlaylist(song.playlistId)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-        </DragDropContext>
+        <>
+          {isOwner && (
+            <DragDropContext onDragEnd={onDragEnd}>
+              <Droppable droppableId="playlist">
+                {(provided) => (
+                  <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
+                    {playlist.map((song, index) => (
+                      <Draggable key={song.playlistId} draggableId={song.playlistId} index={index}>
+                        {(provided) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            className="flex items-center justify-between bg-gray-100 p-2 rounded"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Image 
+                                src={song.thumbnail} 
+                                alt={decodeHtmlEntities(song.title)} 
+                                width={48}
+                                height={36}
+                                className="object-cover rounded" 
+                              />
+                              <Music className="h-4 w-4 text-primary" />
+                              <span className="font-medium line-clamp-1">{decodeHtmlEntities(song.title)}</span>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => removeFromPlaylist(song.playlistId)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
+          )}
+
+          {!isOwner && (
+            <div>
+              {playlist.map((song) => (
+                <div key={song.playlistId} className="flex items-center justify-between bg-gray-100 p-2 rounded mb-2">
+                  <span>{song.title}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {playlist.length > 0 && !currentSong && (
