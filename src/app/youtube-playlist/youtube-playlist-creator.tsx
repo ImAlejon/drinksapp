@@ -10,8 +10,8 @@ import { Input } from "@/components/ui/input"
 import QRCode from 'react-qr-code'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import Image from 'next/image'
-import { useSession, User } from '@supabase/auth-helpers-react'
 import { useSupabase } from '@/components/SupabaseProvider'
+import { User } from '@supabase/auth-helpers-react'
 
 interface Video {
   id: string
@@ -30,7 +30,6 @@ const decodeHtmlEntities = (text: string): string => {
 }
 
 const YouTubePlaylistCreator: React.FC = () => {
-  const session = useSession()
   const { supabase } = useSupabase()
 
   const [searchQuery, setSearchQuery] = useState('')
