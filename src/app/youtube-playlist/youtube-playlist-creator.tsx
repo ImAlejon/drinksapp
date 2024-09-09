@@ -5,10 +5,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Search, PlusCircle, Music, Trash2, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import YouTube from 'react-youtube'
-import { Range, getTrackBackground } from 'react-range'
+import { Range} from 'react-range'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
 import { createClient } from '@supabase/supabase-js'
 import QRCode from 'react-qr-code'
 import { Html5QrcodeScanner } from 'html5-qrcode'
@@ -53,33 +52,44 @@ const YouTubePlaylistCreator: React.FC = () => {
   const [isInitialized, setIsInitialized] = useState(false)
   const [volume, setVolume] = useState(100)
   const [prevVolume, setPrevVolume] = useState(100)
+  const [playlistName, setPlaylistName] = useState('')
+  const [progress, setProgress] = useState(0)
+  const currentTimeRef = useRef(0)
 
   useEffect(() => {
     const initializeSession = async () => {
       if (sessionId) {
+        await fetchPlaylist(sessionId)
         const { data: playbackState, error: playbackError } = await supabase
           .from('playback_states')
           .select('*')
           .eq('session_id', sessionId)
-          .single()
+          .maybeSingle()
 
-        if (playbackError) {
+        if (playbackError && playbackError.code !== 'PGRST116') {
           console.error('Error fetching playback state:', playbackError)
         } else if (playbackState) {
           setIsPlaying(playbackState.is_playing)
           setCurrentTime(playbackState.current_time)
+        } else {
+          // No playback state found, initialize with default values
+          setIsPlaying(false)
+          setCurrentTime(0)
         }
 
         const { data: currentSongData, error: currentSongError } = await supabase
           .from('current_songs')
           .select('*')
           .eq('session_id', sessionId)
-          .single()
+          .maybeSingle()
 
-        if (currentSongError) {
+        if (currentSongError && currentSongError.code !== 'PGRST116') {
           console.error('Error fetching current song:', currentSongError)
         } else if (currentSongData) {
           setCurrentSong(currentSongData.song)
+        } else {
+          // No current song found, set to null
+          setCurrentSong(null)
         }
 
         setIsInitialized(true)
@@ -157,64 +167,107 @@ const YouTubePlaylistCreator: React.FC = () => {
     console.error(error);
   };
 
-  const fetchPlaylist = async (sessionId: string) => {
-    const { data, error } = await supabase
-      .from('playlists')
-      .select('songs')
-      .eq('session_id', sessionId)
-      .single()
+const createPlaylist = async (e: React.FormEvent) => {
+  e.preventDefault()
+  if (!playlistName) return
 
-    if (error) {
-      console.error('Error fetching playlist:', error)
-    } else if (data) {
-      setPlaylist(data.songs || [])
-    }
-  }
+  try {
+    const response = await fetch('/api/playlists', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: playlistName }),
+    })
 
-  const fetchCurrentSong = async (sessionId: string) => {
-    const { data, error } = await supabase
-      .from('current_songs')
-      .select('song')
-      .eq('session_id', sessionId)
-      .single()
+    const data = await response.json()
 
-    if (error) {
-      console.error('Error fetching current song:', error)
-    } else if (data) {
-      setCurrentSong(data.song)
-      setIsPlaying(!!data.song)
-    }
-  }
-
-  const addToPlaylist = async (video: Video) => {
-    if (sessionId) {
-      const newSong: Song = { ...video, playlistId: `playlist-${video.id}` }
-      const updatedPlaylist = [...playlist, newSong]
-      
-      const { error } = await supabase
-        .from('playlists')
-        .upsert({ session_id: sessionId, songs: updatedPlaylist })
-
-      if (error) {
-        console.error('Error adding song to playlist:', error)
+    if (!response.ok) {
+      if (data.error === 'User already has a playlist' && data.sessionId) {
+        setSessionId(data.sessionId)
+        await fetchPlaylist(data.sessionId)
+        setPlaylistName('')
+        setError('You already have a playlist. Loaded existing playlist.')
       } else {
-        setPlaylist(updatedPlaylist)
+        throw new Error(`Failed to create playlist: ${data.error || response.statusText}`)
       }
     } else {
-      console.error('No session ID available')
+      console.log('Playlist created:', data)
+      
+      if (!data.sessionId || !data.playlist) {
+        throw new Error('Invalid response from server')
+      }
+      
+      setSessionId(data.sessionId)
+      setPlaylistName('')
+      fetchPlaylist(data.sessionId)
+    }
+  } catch (error) {
+    console.error('Error creating playlist:', error)
+    setError('Failed to create playlist. Please try again.')
+  }
+}
+ 
+  const fetchPlaylist = async (sessionId: string) => {
+    const response = await fetch(`/api/playlists?sessionId=${sessionId}`)
+    if (response.ok) {
+      const data = await response.json()
+      setPlaylist(data.songs || [])
+    } else {
+      console.error('Error fetching playlist:', await response.text())
     }
   }
 
-  const removeFromPlaylist = async (playlistId: string) => {
+const addToPlaylist = async (video: Video) => {
+  if (sessionId) {
+    const newSong: Song = {
+      ...video,
+      playlistId: `playlist-${video.id}`,
+      thumbnail: `https://img.youtube.com/vi/${video.id}/mqdefault.jpg`
+    }
+    const updatedPlaylist = [...playlist, newSong]
+    
+    try {
+      const response = await fetch(`/api/playlists?sessionId=${sessionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ songs: updatedPlaylist }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      setPlaylist(data.songs)
+    } catch (error) {
+      console.error('Error adding song to playlist:', error)
+      setError('Failed to add song to playlist. Please try again.')
+    }
+  } else {
+    console.error('No session ID available')
+    setError('No active playlist session. Please create or join a playlist.')
+  }
+}
+
+   const removeFromPlaylist = async (playlistId: string) => {
     if (sessionId) {
       const updatedPlaylist = playlist.filter(song => song.playlistId !== playlistId)
       
-      const { error } = await supabase
-        .from('playlists')
-        .upsert({ session_id: sessionId, songs: updatedPlaylist })
+      const response = await fetch(`/api/playlists?sessionId=${sessionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ songs: updatedPlaylist }),
+      })
 
-      if (error) {
-        console.error('Error removing song from playlist:', error)
+      if (response.ok) {
+        setPlaylist(updatedPlaylist)
+      } else {
+        console.error('Error removing song from playlist:', await response.text())
       }
     }
   }
@@ -226,12 +279,18 @@ const YouTubePlaylistCreator: React.FC = () => {
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
 
-    const { error } = await supabase
-      .from('playlists')
-      .upsert({ session_id: sessionId, songs: items })
+    const response = await fetch(`/api/playlists?sessionId=${sessionId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ songs: items }),
+    })
 
-    if (error) {
-      console.error('Error reordering playlist:', error)
+    if (response.ok) {
+      setPlaylist(items)
+    } else {
+      console.error('Error reordering playlist:', await response.text())
     }
   }
 
@@ -277,6 +336,7 @@ const YouTubePlaylistCreator: React.FC = () => {
       }
 
       const data = await response.json()
+      console.log('Search results:', data.videos)
       setSearchResults(data.videos || [])
     } catch (err) {
       setError('Failed to fetch videos. Please try again.')
@@ -288,7 +348,7 @@ const YouTubePlaylistCreator: React.FC = () => {
 
   const onPlayerReady = (event: any) => {
     playerRef.current = event.target
-    setDuration(event.target.getDuration())
+    setDuration(Math.max(1, event.target.getDuration())) // Ensure duration is at least 1 second
     event.target.setVolume(volume) // Set initial volume
     if (isInitialized && currentTime > 0) {
       event.target.seekTo(currentTime)
@@ -308,34 +368,39 @@ const YouTubePlaylistCreator: React.FC = () => {
     } else if (event.data === YouTube.PlayerState.ENDED) {
       setIsPlaying(false)
       setCurrentTime(0)
+      setProgress(0)
       updatePlaybackState(false, 0)
       skipCurrentSong() // Automatically play the next song
     }
   }
 
-  const updatePlaybackState = async (newPlayingState: boolean, newTime: number) => {
+  const updatePlaybackState = useCallback((newPlayingState: boolean, newTime: number) => {
     const now = Date.now()
     if (sessionId && (now - lastUpdateTime.current > 3000 || newPlayingState !== isPlaying)) {
-      await supabase
+      supabase
         .from('playback_states')
         .upsert({ session_id: sessionId, is_playing: newPlayingState, current_time: newTime })
       lastUpdateTime.current = now
     }
-  }
+  }, [sessionId, isPlaying]);
 
-  const handleSeek = useCallback((values: number[]) => {
-    setIsSeeking(true)
-    setCurrentTime(values[0])
-  }, [])
+  const handleSeek = useCallback((value: number) => {
+    setIsSeeking(true);
+    const newTime = (value / 100) * duration;
+    currentTimeRef.current = newTime;
+    setProgress(value);
+  }, [duration]);
 
-  const handleSeekEnd = useCallback(async (values: number[]) => {
-    setIsSeeking(false)
+  const handleSeekEnd = useCallback(async (value: number) => {
+    setIsSeeking(false);
     if (playerRef.current) {
-      const newTime = values[0]
-      playerRef.current.seekTo(newTime)
-      await updatePlaybackState(isPlaying, newTime)
+      const newTime = (value / 100) * duration;
+      playerRef.current.seekTo(newTime);
+      currentTimeRef.current = newTime;
+      setProgress(value);
+      await updatePlaybackState(isPlaying, newTime);
     }
-  }, [isPlaying, updatePlaybackState])
+  }, [isPlaying, updatePlaybackState, duration]);
 
   const handleSkip = useCallback(async (skipAmount: number) => {
     if (playerRef.current) {
@@ -347,27 +412,40 @@ const YouTubePlaylistCreator: React.FC = () => {
   }, [currentTime, isPlaying, updatePlaybackState])
 
   useEffect(() => {
-    const interval = setInterval(async () => {
-      if (playerRef.current && !isSeeking && isPlaying) {
-        const newTime = Math.min(playerRef.current.getCurrentTime(), duration)
-        setCurrentTime(newTime)
-        await updatePlaybackState(isPlaying, newTime)
-      }
-    }, 5000) // Update every 5 seconds to reduce database load
+    let animationFrameId: number;
 
-    return () => clearInterval(interval)
-  }, [isPlaying, isSeeking, duration])
+    const updateProgress = () => {
+      if (playerRef.current && !isSeeking && isPlaying) {
+        const currentTime = playerRef.current.getCurrentTime();
+        const duration = playerRef.current.getDuration();
+        currentTimeRef.current = currentTime;
+        setProgress((currentTime / duration) * 100);
+      }
+      animationFrameId = requestAnimationFrame(updateProgress);
+    };
+
+    if (isPlaying) {
+      animationFrameId = requestAnimationFrame(updateProgress);
+    }
+
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [isPlaying, isSeeking]);
 
   const formatTime = (time: number) => {
-    const minutes = Math.floor(time / 60)
-    const seconds = Math.floor(time % 60)
+    const minutes = Math.floor(Math.max(time, 0) / 60)
+    const seconds = Math.floor(Math.max(time, 0) % 60)
     return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`
   }
 
   const togglePlayPause = () => {
     if (playerRef.current) {
       if (isPlaying) {
-        playerRef.current.pauseVideo()
+        playerRef.current.pause
+              playerRef.current.pauseVideo()
       } else {
         playerRef.current.playVideo()
       }
@@ -381,7 +459,6 @@ const YouTubePlaylistCreator: React.FC = () => {
       sessionStorage.setItem('playlistSessionId', sessionInputId)
       setSessionId(sessionInputId)
       fetchPlaylist(sessionInputId)
-      fetchCurrentSong(sessionInputId)
       setSessionInputId('') // Clear the input after setting
     }
   }
@@ -456,10 +533,22 @@ const YouTubePlaylistCreator: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-lg shadow-lg">
       <h1 className="text-2xl font-bold mb-4 text-center">YouTube Playlist Creator</h1>
       
-      {/* Add this form near the top of your JSX */}
+      <form onSubmit={createPlaylist} className="mb-6 flex gap-2">
+        <Input
+          type="text"
+          placeholder="Enter playlist name"
+          value={playlistName}
+          onChange={(e) => setPlaylistName(e.target.value)}
+          className="flex-grow"
+        />
+        <Button type="submit">
+          Create Playlist
+        </Button>
+      </form>
+
       <form onSubmit={handleSetSession} className="mb-6 flex gap-2">
         <Input
           type="text"
@@ -512,140 +601,101 @@ const YouTubePlaylistCreator: React.FC = () => {
       {isLoading ? (
         <p className="text-center">Loading...</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
           {searchResults.map(video => (
-            <Card key={video.id}>
-              <CardContent className="p-4 flex items-center gap-4">
-                <Image 
-                  src={video.thumbnail} 
-                  alt={decodeHtmlEntities(video.title)} 
-                  width={120} 
-                  height={90} 
-                  className="w-full h-auto" 
+            <div key={video.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="relative h-0 pb-[56.25%]">
+                <Image
+                  src={`https://img.youtube.com/vi/${video.id}/mqdefault.jpg`}
+                  alt={decodeHtmlEntities(video.title)}
+                  width={320}
+                  height={180}
+                  className="absolute top-0 left-0 w-full h-full object-cover"
                 />
-                <div className="flex-grow">
-                  <h3 className="font-medium line-clamp-2">{decodeHtmlEntities(video.title)}</h3>
-                  <Button onClick={() => addToPlaylist(video)} size="sm" className="mt-2">
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Add to Playlist
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+              <div className="p-4">
+                <h3 className="font-medium text-sm mb-2 line-clamp-2">{decodeHtmlEntities(video.title)}</h3>
+                <Button onClick={() => addToPlaylist(video)} size="sm" className="w-full">
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Add to Playlist
+                </Button>
+              </div>
+            </div>
           ))}
         </div>
       )}
 
-      <h2 className="text-xl font-semibold mb-4">Now Playing</h2>
-      {currentSong && duration > 0 && (
-        <div className="mb-4">
-          <YouTube
-            videoId={currentSong.id}
-            opts={{
-              height: '390',
-              width: '640',
-              playerVars: {
-                autoplay: 1,
-                controls: 0,
-                disablekb: 1,
-                fs: 0,
-                modestbranding: 1,
-                rel: 0,
-              },
-            }}
-            onReady={onPlayerReady}
-            onStateChange={onPlayerStateChange}
-          />
+      {currentSong && (
+        <div className="mb-6 w-full max-w-full overflow-hidden">
+          <div className="relative pt-[56.25%]"> {/* 16:9 aspect ratio */}
+            <YouTube
+              videoId={currentSong.id}
+              opts={{
+                height: '100%',
+                width: '100%',
+                playerVars: {
+                  autoplay: 1,
+                },
+              }}
+              onReady={onPlayerReady}
+              onStateChange={onPlayerStateChange}
+              className="absolute top-0 left-0 w-full h-full"
+            />
+          </div>
           <div className="mt-4">
             <Range
-              values={[Math.min(currentTime, duration)]}
-              step={1}
+              values={[progress]}
+              step={0.1}
               min={0}
-              max={duration}
-              onChange={handleSeek}
-              onFinalChange={handleSeekEnd}
+              max={100}
+              onChange={(values) => handleSeek(values[0])}
+              onFinalChange={(values) => handleSeekEnd(values[0])}
               renderTrack={({ props, children }) => (
                 <div
-                  onMouseDown={props.onMouseDown}
-                  onTouchStart={props.onTouchStart}
-                  style={{
-                    ...props.style,
-                    height: '36px',
-                    display: 'flex',
-                    width: '100%'
-                  }}
+                  {...props}
+                  className="h-2 w-full bg-gray-200 rounded-full"
                 >
                   <div
-                    ref={props.ref}
-                    style={{
-                      height: '5px',
-                      width: '100%',
-                      borderRadius: '4px',
-                      background: getTrackBackground({
-                        values: [currentTime],
-                        colors: ['#548BF4', '#ccc'],
-                        min: 0,
-                        max: duration
-                      }),
-                      alignSelf: 'center'
-                    }}
-                  >
-                    {children}
-                  </div>
+                    className="h-full bg-blue-500 rounded-full"
+                    style={{ width: `${progress}%` }}
+                  />
+                  {children}
                 </div>
               )}
-              renderThumb={({ props, isDragged }) => (
+              renderThumb={({ props }) => (
                 <div
                   {...props}
-                  style={{
-                    ...props.style,
-                    height: '12px',
-                    width: '12px',
-                    borderRadius: '1px',
-                    backgroundColor: '#FFF',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    boxShadow: '0px 2px 6px #AAA'
-                  }}
-                >
-                  <div
-                    style={{
-                      height: '5px',
-                      width: '5px',
-                      backgroundColor: isDragged ? '#548BF4' : '#CCC'
-                    }}
-                  />
-                </div>
+                  className="h-4 w-4 bg-blue-500 rounded-full shadow"
+                />
               )}
             />
             <div className="flex justify-between text-sm mt-1">
-              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(currentTimeRef.current)}</span>
               <span>{formatTime(duration)}</span>
             </div>
           </div>
-          <div className="flex justify-between items-center mt-2">
-            <h3 className="font-medium">{decodeHtmlEntities(currentSong.title)}</h3>
-            <div className="flex items-center gap-2">
-              <Button onClick={() => handleSkip(-10)}>
+          <div className="flex flex-wrap justify-between items-center mt-2">
+            <h3 className="font-medium text-sm mb-2 w-full">{decodeHtmlEntities(currentSong.title)}</h3>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Button onClick={() => handleSkip(-10)} size="sm">
                 <SkipBack className="h-4 w-4" />
               </Button>
-              <Button onClick={togglePlayPause}>
+              <Button onClick={togglePlayPause} size="sm">
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               </Button>
-              <Button onClick={() => handleSkip(10)}>
+              <Button onClick={() => handleSkip(10)} size="sm">
                 <SkipForward className="h-4 w-4" />
               </Button>
-              <Button onClick={skipCurrentSong}>
+              <Button onClick={skipCurrentSong} size="sm">
                 <SkipForward className="h-4 w-4" />
                 Skip
               </Button>
-              <VolumeControl
-                volume={volume}
-                onVolumeChange={handleVolumeChange}
-                onToggleMute={toggleMute}
-              />
             </div>
+            <VolumeControl
+              volume={volume}
+              onVolumeChange={handleVolumeChange}
+              onToggleMute={toggleMute}
+            />
           </div>
         </div>
       )}
@@ -671,8 +721,8 @@ const YouTubePlaylistCreator: React.FC = () => {
                           <Image 
                             src={song.thumbnail} 
                             alt={decodeHtmlEntities(song.title)} 
-                            width={48}  // This corresponds to w-12 (12 * 4px)
-                            height={36} // This corresponds to h-9 (9 * 4px)
+                            width={48}
+                            height={36}
                             className="object-cover rounded" 
                           />
                           <Music className="h-4 w-4 text-primary" />

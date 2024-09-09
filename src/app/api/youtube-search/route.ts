@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     const videos = data.items.map((item: any) => ({
       id: item.id.videoId,
       title: item.snippet.title,
-      thumbnail: item.snippet.thumbnails.default.url
+      thumbnail: `https://img.youtube.com/vi/${item.id.videoId}/mqdefault.jpg`
     }))
 
     return NextResponse.json({ videos })
