@@ -47,16 +47,16 @@ export function MainNav() {
         <NavigationMenu>
           <NavigationMenuList>
             <NavigationMenuItem>
-              <Link href="/" legacyBehavior passHref>
+              {/* <Link href="/" legacyBehavior passHref>
                 <NavigationMenuLink className={navigationMenuTriggerStyle()}>
                   Home
                 </NavigationMenuLink>
-              </Link>
+              </Link> */}
             </NavigationMenuItem>
             <NavigationMenuItem>
               <Link href="/youtube-playlist" legacyBehavior passHref>
                 <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                  YouTube Playlist
+                   Playlist
                 </NavigationMenuLink>
               </Link>
             </NavigationMenuItem>

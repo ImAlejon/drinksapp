@@ -16,9 +16,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const checkUser = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        
-        if (!session?.user && pathname !== '/login') {
-          router.push('/login')
+      
+        if (!session?.user && pathname !== '/' && pathname !== '/login') {
+          router.push('/')
         }
       } catch (e) {
         console.error("Error checking auth status:", e)
@@ -33,11 +33,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN') {
         setIsLoading(false)
-        if (pathname === '/login') {
-          router.push('/')
+        if (pathname === '/') {
+          router.push('/youtube-playlist')
         }
       } else if (event === 'SIGNED_OUT') {
-        router.push('/login')
+        router.push('/')
         setIsLoading(false)
       }
     });
