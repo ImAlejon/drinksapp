@@ -13,11 +13,8 @@ import FloatingMenu from '@/components/FloatingMenu'
 import FullScreenQRCode from '@/components/FullScreenQRCode'
 import { YouTubePlayer } from 'youtube-player/dist/types'
 import YouTube from 'react-youtube'
-import { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 
-interface PlaylistPayload {
-  songs: Song[]
-}
+
 
 interface Video {
   id: string

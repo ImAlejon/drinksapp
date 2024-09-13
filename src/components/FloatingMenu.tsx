@@ -59,7 +59,7 @@ const FloatingMenu: React.FC<FloatingMenuProps> = ({
         scanner.clear().catch(console.error);
       }
     };
-  }, [isScanQRCodeOpen]);
+  }, );
 
   const onScanSuccess = (decodedText: string) => {
     console.log(`QR Code detected: ${decodedText}`);
