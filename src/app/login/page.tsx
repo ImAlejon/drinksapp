@@ -45,6 +45,7 @@ export default function Login() {
       if (error) throw error
     } catch (error) {
       setError(error instanceof Error ? error.message : 'An unknown error occurred')
+    } finally {
       setIsLoading(false)
     }
   }

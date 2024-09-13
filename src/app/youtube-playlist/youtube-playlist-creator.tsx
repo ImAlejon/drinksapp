@@ -13,6 +13,11 @@ import FloatingMenu from '@/components/FloatingMenu'
 import FullScreenQRCode from '@/components/FullScreenQRCode'
 import { YouTubePlayer } from 'youtube-player/dist/types'
 import YouTube from 'react-youtube'
+import { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
+
+interface PlaylistPayload {
+  songs: Song[]
+}
 
 interface Video {
   id: string
@@ -64,6 +69,29 @@ const YouTubePlaylistCreator: React.FC = () => {
 
     initializeComponent()
   }, [supabase])
+
+  useEffect(() => {
+    if (sessionId) {
+      const channel = supabase
+        .channel(`playlist_${sessionId}`)
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'playlists',
+          filter: `session_id=eq.${sessionId}`
+        }, (payload) => {
+          console.log('Change received!', payload)
+          if (payload.new && 'songs' in payload.new) {
+            setPlaylist(payload.new.songs)
+          }
+        })
+        .subscribe()
+
+      return () => {
+        supabase.removeChannel(channel)
+      }
+    }
+  }, [sessionId, supabase])
 
   const joinSession = async (inputSessionId: string) => {
     try {
@@ -134,24 +162,13 @@ const YouTubePlaylistCreator: React.FC = () => {
       }
       const updatedPlaylist = [...playlist, newSong]
       
-      try {
-        const response = await fetch(`/api/playlists?sessionId=${sessionId}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ songs: updatedPlaylist }),
-        })
+      const { error } = await supabase
+        .from('playlists')
+        .update({ songs: updatedPlaylist })
+        .eq('session_id', sessionId)
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-
-        const data = await response.json()
-        setPlaylist(data.songs)
-      } catch (error) {
-        console.error('Error adding song to playlist:', error)
-        setError('Failed to add song to playlist. Please try again.')
+      if (error) {
+        console.error('Error updating playlist:', error)
       }
     } else {
       setError('No active playlist session. Please create or join a playlist.')
@@ -162,18 +179,13 @@ const YouTubePlaylistCreator: React.FC = () => {
     if (sessionId && isOwner) {
       const updatedPlaylist = playlist.filter(song => song.playlistId !== playlistId)
       
-      const response = await fetch(`/api/playlists?sessionId=${sessionId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ songs: updatedPlaylist }),
-      })
+      const { error } = await supabase
+        .from('playlists')
+        .update({ songs: updatedPlaylist })
+        .eq('session_id', sessionId)
 
-      if (response.ok) {
-        setPlaylist(updatedPlaylist)
-      } else {
-        console.error('Error removing song from playlist:', await response.text())
+      if (error) {
+        console.error('Error updating playlist:', error)
       }
     } else if (!isOwner) {
       setError('Only the playlist owner can remove songs')
@@ -187,18 +199,13 @@ const YouTubePlaylistCreator: React.FC = () => {
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
 
-    const response = await fetch(`/api/playlists?sessionId=${sessionId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ songs: items }),
-    })
+    const { error } = await supabase
+      .from('playlists')
+      .update({ songs: items })
+      .eq('session_id', sessionId)
 
-    if (response.ok) {
-      setPlaylist(items)
-    } else {
-      console.error('Error reordering playlist:', await response.text())
+    if (error) {
+      console.error('Error updating playlist order:', error)
     }
   }
 
@@ -346,7 +353,8 @@ const handleSeekEnd = useCallback(async (value: number) => {
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-lg shadow-lg relative">
       {!sessionId && (<h1 className="text-2xl font-bold mb-4 text-center">Hi {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'there'}!</h1>)}
-      {sessionId && (<h1 className="text-2xl font-bold mb-4 text-center">Now Playing: {currentSong?.title}</h1>)}
+      {sessionId && isOwner && (<h1 className="text-2xl font-bold mb-4 text-center">Now Playing: {currentSong?.title || '-'}</h1>)}
+      {sessionId && !isOwner && (<h1 className="text-2xl font-bold mb-4 text-center">{sessionName}</h1>)}
       {error && <p className="text-red-500">{error}</p>}
       {isLoading ? (
         <p className="text-center">Loading...</p>
@@ -357,7 +365,6 @@ const handleSeekEnd = useCallback(async (value: number) => {
           )}
           {sessionId && (
             <>
-              <p>Current Session: {sessionName || sessionId}</p>
               <SearchForm onSearch={handleSearch} isLoading={isSearching} />
               <SearchResults results={searchResults} onAddToPlaylist={addToPlaylist} />
               <PlaylistView playlist={playlist} isOwner={isOwner} onRemoveFromPlaylist={removeFromPlaylist} onDragEnd={onDragEnd} />
