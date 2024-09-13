@@ -102,56 +102,22 @@ export async function PATCH(req: Request) {
   const { searchParams } = new URL(req.url)
   const sessionId = searchParams.get('sessionId')
 
-  console.log('PATCH request received for sessionId:', sessionId)
-
   if (!sessionId) {
     return NextResponse.json({ error: 'Session ID is required' }, { status: 400 })
   }
 
-  const { data: { user } } = await supabase.auth.getUser()
-
-  console.log('Current user:', user)
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { songs } = await req.json()
 
   try {
-    // Check if the user is the host
-    const { data: playlist, error: playlistError } = await supabase
-      .from('playlists')
-      .select('host_id')
-      .eq('session_id', sessionId)
-      .single()
-
-    console.log('Playlist data:', playlist)
-
-    if (playlistError) {
-      console.error('Playlist error:', playlistError)
-      throw playlistError
-    }
-
-    if (user.id !== playlist?.host_id) {
-      console.log('User is not the host')
-      return NextResponse.json({ error: 'Only the host can modify the playlist' }, { status: 403 })
-    }
-
-    const { songs } = await req.json()
-
     const { data, error } = await supabase
       .from('playlists')
-      .update({ songs })
+      .update({ songs: songs })
       .eq('session_id', sessionId)
       .select()
-      .single()
 
-    if (error) {
-      console.error('Update error:', error)
-      throw error
-    }
+    if (error) throw error
 
-    console.log('Playlist updated successfully')
-    return NextResponse.json(data)
+    return NextResponse.json(data[0])
   } catch (error) {
     console.error('Error updating playlist:', error)
     return NextResponse.json({ error: 'Failed to update playlist' }, { status: 500 })

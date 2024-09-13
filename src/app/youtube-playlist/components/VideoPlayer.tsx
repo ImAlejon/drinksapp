@@ -42,6 +42,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onSeek,
   onSeekEnd
 }) => {
+  const [error] = useState<string | null>(null);
+
+  const handleError = () => {
+    onSkipSong();
+  };
+
   const [volume, setVolume] = useState(100)
   const [prevVolume, setPrevVolume] = useState(100)
   const playerRef = useRef<YouTubePlayer | null>(null)
@@ -69,37 +75,49 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, [volume])
 
   return (
-    <div className="mb-6 w-full max-w-full overflow-hidden">
-      <div className="relative pt-[56.25%]">
-        <YouTube
-          videoId={currentSong.id}
-          opts={{
-            height: '100%',
-            width: '100%',
-            playerVars: {
-              autoplay: 1,
-            },
-          }}
-          onReady={(event: YouTubeEvent<YouTubePlayer>) => {
-            playerRef.current = event.target
-            onPlayerReady(event)
-          }}
-          onStateChange={onPlayerStateChange}
-          className="absolute top-0 left-0 w-full h-full"
-        />
-      </div>
+    <div className="mb-6 max-w-3xl mx-auto">
+      {error ? (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{error}</span>
+          <a 
+            href={`https://www.youtube.com/watch?v=${currentSong.id}`} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="underline ml-2"
+          >
+            Watch on YouTube
+          </a>
+        </div>
+      ) : (
+        <div className="relative pt-[56.25%]"> {/* 16:9 Aspect Ratio */}
+          <YouTube
+            videoId={currentSong.id}
+            opts={{
+              height: '100%',
+              width: '100%',
+              playerVars: {
+                autoplay: 1,
+              },
+            }}
+            onReady={onPlayerReady}
+            onError={handleError}
+            onStateChange={onPlayerStateChange}
+            className="absolute top-0 left-0 w-full h-full"
+          />
+        </div>
+      )}
       <div className="mt-4">
         <input
           type="range"
-          min="0"
-          max="100"
-          step="0.1"
-          value={(currentTime / duration) * 100}
-          onChange={(e) => onSeek(parseFloat(e.target.value))}
-          onMouseUp={(e) => onSeekEnd(parseFloat((e.target as HTMLInputElement).value))}
+          min={0}
+          max={duration}
+          value={currentTime}
+          onChange={(e) => onSeek(Number(e.target.value))}
+          onMouseUp={(e) => onSeekEnd(Number((e.target as HTMLInputElement).value))}
           className="w-full"
         />
-        <div className="flex justify-between text-sm mt-1">
+        <div className="flex justify-between text-sm">
           <span>{formatTime(currentTime)}</span>
           <span>{formatTime(duration)}</span>
         </div>

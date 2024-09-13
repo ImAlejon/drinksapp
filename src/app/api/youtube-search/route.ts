@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
   try {
     const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&key=${API_KEY}`
+      `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&videoEmbeddable=true&key=${API_KEY}`
     )
 
     if (!response.ok) {
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     const videos = data.items.map((item: any) => ({
       id: item.id.videoId,
       title: item.snippet.title,
-      thumbnail: `https://img.youtube.com/vi/${item.id.videoId}/mqdefault.jpg`
+      thumbnail: item.snippet.thumbnails.medium.url
     }))
 
     return NextResponse.json({ videos })

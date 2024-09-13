@@ -45,7 +45,7 @@ export default function Home() {
         <div className="text-center mb-16">
           <h1 className="text-5xl md:text-7xl font-extrabold mb-6 tracking-tight">
             Turn Any Device Into a{" "}
-            <span className="bg-black text-white px-2">Party Jukebox!</span>
+            <span className="bg-black text-white px-2 ">Party Jukebox!</span>
           </h1>
           <p className="text-xl md:text-2xl mb-8 text-gray-600">
             Connect, control, and amplify your music experience anywhere, anytime.

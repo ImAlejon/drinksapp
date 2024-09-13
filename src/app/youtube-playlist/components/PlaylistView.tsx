@@ -33,7 +33,7 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, isOwner, onRemove
   }
 
   return (
-    <div>
+    <div className="py-4">
       <h2 className="text-xl font-semibold mb-4">Your Playlist</h2>
       {isOwner ? (
         <DragDropContext onDragEnd={onDragEnd}>

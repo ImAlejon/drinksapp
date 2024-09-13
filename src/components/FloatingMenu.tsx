@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Plus, Users, QrCode, Share2, X } from 'lucide-react';
@@ -26,24 +26,22 @@ const FloatingMenu: React.FC<FloatingMenuProps> = ({
   const [isShowQRCodeOpen, setIsShowQRCodeOpen] = useState(false);
   const [playlistName, setPlaylistName] = useState('');
   const [inputSessionId, setInputSessionId] = useState('');
-  const qrCodeScannerRef = useRef<Html5QrcodeScanner | null>(null);
 
   useEffect(() => {
+    let scanner: Html5QrcodeScanner | null = null;
+
     if (isScanQRCodeOpen) {
-      qrCodeScannerRef.current = new Html5QrcodeScanner(
+      scanner = new Html5QrcodeScanner(
         "qr-reader",
         { fps: 10, qrbox: 250 },
         false
       );
-      qrCodeScannerRef.current.render(onScanSuccess, onScanFailure);
-    } else {
-      if (qrCodeScannerRef.current) {
-        qrCodeScannerRef.current.clear();
-      }
+      scanner.render(onScanSuccess, onScanFailure);
     }
+
     return () => {
-      if (qrCodeScannerRef.current) {
-        qrCodeScannerRef.current.clear();
+      if (scanner) {
+        scanner.clear();
       }
     };
   });
@@ -135,7 +133,7 @@ const FloatingMenu: React.FC<FloatingMenuProps> = ({
             </Dialog>
             <Dialog open={isScanQRCodeOpen} onOpenChange={setIsScanQRCodeOpen}>
               <DialogTrigger asChild>
-                <Button className="w-full justify-start" onClick={(e) => e.preventDefault()}>
+                <Button className="w-full justify-start">
                   <QrCode className="mr-2 h-4 w-4" /> Scan QR Code
                 </Button>
               </DialogTrigger>
