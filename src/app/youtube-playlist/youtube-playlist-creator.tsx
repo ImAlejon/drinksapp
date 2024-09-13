@@ -129,7 +129,7 @@ const YouTubePlaylistCreator: React.FC = () => {
     if (sessionId) {
       const newSong: Song = {
         ...video,
-        playlistId: `playlist-${video.id}`,
+        playlistId: `playlist-${video.id}-${Date.now()}`,
         thumbnail: `https://img.youtube.com/vi/${video.id}/mqdefault.jpg`
       }
       const updatedPlaylist = [...playlist, newSong]
@@ -353,7 +353,7 @@ const handleSeekEnd = useCallback(async (value: number) => {
       ) : (
         <>
           {!sessionId && (
-      (<text className="mb-2 text-sm text-gray-600">Click on the menu to create or join a session</text>)
+      (<div className="mb-2 text-sm text-gray-600">Click on the menu to create or join a session</div>)
           )}
           {sessionId && (
             <>

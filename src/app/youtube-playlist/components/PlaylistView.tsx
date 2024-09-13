@@ -41,7 +41,7 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({ playlist, isOwner, onRemove
             {(provided) => (
               <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
                 {playlist.map((song, index) => (
-                  <Draggable key={song.playlistId} draggableId={song.playlistId} index={index}>
+                  <Draggable key={`${song.id}-${index}`} draggableId={song.playlistId} index={index}>
                     {(provided) => (
                       <div
                         ref={provided.innerRef}

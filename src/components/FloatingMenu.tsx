@@ -31,20 +31,35 @@ const FloatingMenu: React.FC<FloatingMenuProps> = ({
     let scanner: Html5QrcodeScanner | null = null;
 
     if (isScanQRCodeOpen) {
-      scanner = new Html5QrcodeScanner(
-        "qr-reader",
-        { fps: 10, qrbox: 250 },
-        false
-      );
-      scanner.render(onScanSuccess, onScanFailure);
+      const initializeScanner = () => {
+        const qrReaderElement = document.getElementById("qr-reader");
+        if (qrReaderElement) {
+          scanner = new Html5QrcodeScanner(
+            "qr-reader",
+            { 
+              fps: 10, 
+              qrbox: {
+                width: 250,
+                height: 250,
+              },
+              rememberLastUsedCamera: true,
+            },
+            /* verbose= */ false
+          );
+          scanner.render(onScanSuccess, onScanFailure);
+        } else {
+          setTimeout(initializeScanner, 100); // Retry after 100ms
+        }
+      };
+      initializeScanner();
     }
 
     return () => {
       if (scanner) {
-        scanner.clear();
+        scanner.clear().catch(console.error);
       }
     };
-  });
+  }, [isScanQRCodeOpen]);
 
   const onScanSuccess = (decodedText: string) => {
     console.log(`QR Code detected: ${decodedText}`);
@@ -141,10 +156,24 @@ const FloatingMenu: React.FC<FloatingMenuProps> = ({
                 <DialogHeader>
                   <DialogTitle>Scan QR Code</DialogTitle>
                 </DialogHeader>
-                <div id="qr-reader" className="w-full"></div>
-                <Button onClick={() => setIsScanQRCodeOpen(false)} className="mt-4">
-                  <X className="mr-2 h-4 w-4" /> Close Scanner
-                </Button>
+                <div className="flex flex-col items-center">
+                  <div 
+                    id="qr-reader" 
+                    className="w-full max-w-sm aspect-square bg-gray-100 rounded-lg overflow-hidden"
+                  ></div>
+                  <p className="mt-4 text-sm text-gray-500 text-center">
+                    Position the QR code within the frame to scan
+                  </p>
+                </div>
+                <div className="flex justify-center mt-6">
+                  <Button 
+                    onClick={() => setIsScanQRCodeOpen(false)}
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                  >
+                    <X className="mr-2 h-4 w-4" /> Close Scanner
+                  </Button>
+                </div>
               </DialogContent>
             </Dialog>
             {hasActiveSession && (
