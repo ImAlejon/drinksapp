@@ -1,6 +1,7 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import crypto from 'crypto'
 
 export async function POST(req: Request) {
   const supabase = createRouteHandlerClient({ cookies })
@@ -12,6 +13,24 @@ export async function POST(req: Request) {
     console.error('No authenticated user found')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // Check if a playlist with this name already exists
+  const { data: existingPlaylists, error: fetchError } = await supabase
+    .from('playlists')
+    .select('name')
+    .eq('name', name)
+
+  if (fetchError) {
+    console.error('Error checking for existing playlists:', fetchError)
+    return NextResponse.json({ error: 'Failed to create playlist' }, { status: 500 })
+  }
+
+  if (existingPlaylists && existingPlaylists.length > 0) {
+    return NextResponse.json({ error: 'A playlist with this name already exists' }, { status: 400 })
+  }
+
+  // If no existing playlist found, proceed with creation
+  const sessionId = crypto.randomUUID()
 
   console.log('Attempting to create playlist for user:', user.id)
 

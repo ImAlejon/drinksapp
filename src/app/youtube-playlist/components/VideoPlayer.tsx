@@ -2,6 +2,7 @@ import React, { useRef, useState, useCallback, useEffect } from 'react'
 import YouTube, { YouTubeEvent, YouTubePlayer } from 'react-youtube'
 import { Pause, Play, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react'
 import { Button } from "@/components/ui/button"
+import { toast } from 'react-hot-toast'
 
 interface Song {
   id: string
@@ -42,15 +43,42 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onSeek,
   onSeekEnd
 }) => {
-  const [error] = useState<string | null>(null);
-
-  const handleError = () => {
-    onSkipSong();
-  };
-
+  const [error, setError] = useState<string | null>(null);
   const [volume, setVolume] = useState(100)
   const [prevVolume, setPrevVolume] = useState(100)
   const playerRef = useRef<YouTubePlayer | null>(null)
+
+  const showCustomToast = (message: string, icon: React.ReactNode) => {
+    toast.custom(
+      (t) => (
+        <div
+          className={`${
+            t.visible ? 'animate-enter' : 'animate-leave'
+          } max-w-sm w-full bg-white shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5 transition-all duration-300 ease-in-out ${
+            t.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+          }`}
+        >
+          <div className="flex-1 w-0 p-3">
+            <div className="flex items-start">
+              <div className="flex-shrink-0 pt-0.5">
+                {icon}
+              </div>
+              <div className="ml-2 flex-1">
+                <p className="text-sm font-medium text-gray-900">{message}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+      { duration: 2000 }
+    )
+  }
+
+  const handleError = () => {
+    setError('An error occurred while playing the video.')
+    showCustomToast('Error playing video. Skipping to next song.', <SkipForward className="h-5 w-5 text-red-500" />)
+    onSkipSong();
+  };
 
   const handleVolumeChange = useCallback((newVolume: number) => {
     setVolume(newVolume)
@@ -63,8 +91,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (volume > 0) {
       setPrevVolume(volume)
       handleVolumeChange(0)
+      showCustomToast('Muted', <VolumeX className="h-5 w-5 text-blue-500" />)
     } else {
       handleVolumeChange(prevVolume)
+      showCustomToast('Unmuted', <Volume2 className="h-5 w-5 text-blue-500" />)
     }
   }, [volume, prevVolume, handleVolumeChange])
 
@@ -73,6 +103,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       playerRef.current.setVolume(volume)
     }
   }, [volume])
+
+  const handlePlayerReady = (event: YouTubeEvent<YouTubePlayer>) => {
+    playerRef.current = event.target
+    onPlayerReady(event)
+  }
 
   return (
     <div className="mb-6 max-w-3xl mx-auto">
@@ -100,7 +135,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 autoplay: 1,
               },
             }}
-            onReady={onPlayerReady}
+            onReady={handlePlayerReady}
             onError={handleError}
             onStateChange={onPlayerStateChange}
             className="absolute top-0 left-0 w-full h-full"
@@ -124,16 +159,28 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         <div className="flex flex-wrap justify-between items-center mt-2">
           <h3 className="font-medium text-sm mb-2 w-full">{currentSong.title}</h3>
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Button onClick={() => onSkip(-10)} size="sm">
+            <Button onClick={() => {
+              onSkip(-10)
+              showCustomToast('Skipped back 10 seconds', <SkipBack className="h-5 w-5 text-green-500" />)
+            }} size="sm">
               <SkipBack className="h-4 w-4" />
             </Button>
-            <Button onClick={onTogglePlayPause} size="sm">
+            <Button onClick={() => {
+              onTogglePlayPause()
+              showCustomToast(isPlaying ? 'Paused' : 'Playing', isPlaying ? <Pause className="h-5 w-5 text-yellow-500" /> : <Play className="h-5 w-5 text-green-500" />)
+            }} size="sm">
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             </Button>
-            <Button onClick={() => onSkip(10)} size="sm">
+            <Button onClick={() => {
+              onSkip(10)
+              showCustomToast('Skipped forward 10 seconds', <SkipForward className="h-5 w-5 text-green-500" />)
+            }} size="sm">
               <SkipForward className="h-4 w-4" />
             </Button>
-            <Button onClick={onSkipSong} size="sm">
+            <Button onClick={() => {
+              onSkipSong()
+              showCustomToast('Skipped to next song', <SkipForward className="h-5 w-5 text-blue-500" />)
+            }} size="sm">
               <SkipForward className="h-4 w-4" />
               Skip
             </Button>

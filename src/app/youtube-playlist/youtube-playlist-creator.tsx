@@ -13,6 +13,10 @@ import FloatingMenu from '@/components/FloatingMenu'
 import FullScreenQRCode from '@/components/FullScreenQRCode'
 import { YouTubePlayer } from 'youtube-player/dist/types'
 import YouTube from 'react-youtube'
+import { toast } from 'react-hot-toast'
+import { AlertCircle, CheckCircle, XCircle } from 'lucide-react'
+import CreditPopup from '@/components/CreditPopup'
+import { useUserCredits } from '@/contexts/UserCreditsContext'
 
 
 
@@ -24,10 +28,16 @@ interface Video {
 
 interface Song extends Video {
   playlistId: string
+  added_by: {
+    id: string
+    name: string
+  }
+  credits: number
 }
 
 const YouTubePlaylistCreator: React.FC = () => {
   const { supabase } = useSupabase()
+  const { credits: userCredits, updateCredits: updateUserCredits } = useUserCredits()
 
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -47,6 +57,9 @@ const YouTubePlaylistCreator: React.FC = () => {
   const [sessionName, setSessionName] = useState<string | null>(null)
   const [, setIsSeeking] = useState(false)
   const lastUpdateTime = useRef(0)
+  const [isCreditPopupOpen, setIsCreditPopupOpen] = useState(false)
+  const [pendingSong, setPendingSong] = useState<Video | null>(null)
+  const [hasCreditedSongs, setHasCreditedSongs] = useState(false)
 
   useEffect(() => {
     const initializeComponent = async () => {
@@ -90,6 +103,29 @@ const YouTubePlaylistCreator: React.FC = () => {
     }
   }, [sessionId, supabase])
 
+  useEffect(() => {
+    if (sessionId) {
+      fetchPlaylistData(sessionId);
+    }
+  }, [sessionId]);
+
+  const fetchPlaylistData = async (sid: string) => {
+    try {
+      const response = await fetch(`/api/playlists?sessionId=${sid}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch playlist data');
+      }
+      const data = await response.json();
+      setPlaylist(data.songs || []);
+      setSessionName(data.name);
+      setIsOwner(user?.id === data.host_id);
+      setHasCreditedSongs(data.songs?.some((song: Song) => song.credits > 0) || false);
+    } catch (error) {
+      console.error('Error fetching playlist data:', error);
+      setError('Failed to load playlist. Please try again.');
+    }
+  };
+
   const joinSession = async (inputSessionId: string) => {
     try {
       const response = await fetch(`/api/playlists?sessionId=${inputSessionId}`)
@@ -108,6 +144,33 @@ const YouTubePlaylistCreator: React.FC = () => {
     }
   }
 
+  const showCustomToast = (message: string, icon: React.ReactNode, duration?: number) => {
+    toast.custom(
+      (t) => (
+        <div
+          className={`${
+            t.visible ? 'animate-enter' : 'animate-leave'
+          } max-w-sm w-full bg-white shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5 transition-all duration-300 ease-in-out ${
+            t.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+          }`}
+        >
+          <div className="flex-1 w-0 p-3">
+            <div className="flex items-start">
+              <div className="flex-shrink-0 pt-0.5">
+                {icon}
+              </div>
+              <div className="ml-2 flex-1">
+                <p className="text-sm font-medium text-gray-900">{message}</p>
+              </div>
+            </div>
+          </div>
+          
+        </div>
+      ),
+      { duration: duration || 300 }
+    )
+  }
+
   const createPlaylist = async (playlistName: string) => {
     if (!user) return
 
@@ -123,16 +186,28 @@ const YouTubePlaylistCreator: React.FC = () => {
       const data = await response.json()
 
       if (response.ok) {
-        setSessionId(data.sessionId)
-        setSessionName(playlistName)
-        setIsOwner(true)
-        setPlaylist([])
+        if (data.message === 'User already has a playlist') {
+          showCustomToast('You already have a playlist. Focusing on existing playlist.', <AlertCircle className="h-5 w-5 text-yellow-500" />, 2000)
+          setSessionId(data.sessionId)
+          setSessionName(data.name || playlistName)
+          setIsOwner(true)
+          setPlaylist(data.songs || [])
+        } else {
+          showCustomToast('Playlist created successfully', <CheckCircle className="h-5 w-5 text-green-500" />)
+          setSessionId(data.sessionId)
+          setSessionName(playlistName)
+          setIsOwner(true)
+          setPlaylist([])
+        }
       } else {
         throw new Error(data.error || 'Failed to create playlist')
       }
     } catch (error) {
       console.error('Error creating playlist:', error)
-      setError('Failed to create playlist. Please try again.')
+      showCustomToast(
+        error instanceof Error ? error.message : 'An unknown error occurred',
+        <XCircle className="h-5 w-5 text-red-500" />
+      )
     }
   }
 
@@ -150,44 +225,139 @@ const YouTubePlaylistCreator: React.FC = () => {
     }
   }
 
+  const sortPlaylistByCredits = (playlist: Song[]): Song[] => {
+    return [...playlist].sort((a, b) => b.credits - a.credits);
+  };
+
   const addToPlaylist = async (video: Video) => {
-    if (sessionId) {
+    setPendingSong(video)
+    setIsCreditPopupOpen(true)
+  }
+
+  const handleConfirmCredits = async (credits: number) => {
+    if (pendingSong && sessionId && user) {
       const newSong: Song = {
-        ...video,
-        playlistId: `playlist-${video.id}-${Date.now()}`,
-        thumbnail: `https://img.youtube.com/vi/${video.id}/mqdefault.jpg`
+        ...pendingSong,
+        playlistId: `playlist-${pendingSong.id}-${Date.now()}`,
+        thumbnail: `https://img.youtube.com/vi/${pendingSong.id}/mqdefault.jpg`,
+        added_by: {
+          id: user.id,
+          name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Unknown User'
+        },
+        credits: credits
+      };
+
+      const updatedPlaylist = sortPlaylistByCredits([...playlist, newSong]);
+      const newUserCredits = userCredits - credits;
+
+      const { error } = await supabase
+        .from('playlists')
+        .update({ songs: updatedPlaylist })
+        .eq('session_id', sessionId);
+
+      if (error) {
+        console.error('Error updating playlist:', error);
+        toast.error('Failed to add song to playlist');
+      } else {
+        setPlaylist(updatedPlaylist);
+        updateUserCredits(newUserCredits);
+        toast.success('Song added to playlist');
       }
-      const updatedPlaylist = [...playlist, newSong]
+    }
+    setPendingSong(null);
+  };
+
+  const updateSongCredits = async (playlistId: string, newCredits: number) => {
+    if (sessionId && user) {
+      const songIndex = playlist.findIndex(song => song.playlistId === playlistId);
+      if (songIndex === -1) return;
+
+      const song = playlist[songIndex];
+      if (user.id !== song.added_by.id && !isOwner) {
+        toast.error('You do not have permission to update credits for this song');
+        return;
+      }
+
+      const creditDifference = newCredits - song.credits;
+      if (creditDifference > userCredits) {
+        toast.error('Not enough credits');
+        return;
+      }
+
+      const updatedSong = { ...song, credits: newCredits };
+      const updatedPlaylist = sortPlaylistByCredits([
+        ...playlist.slice(0, songIndex),
+        updatedSong,
+        ...playlist.slice(songIndex + 1)
+      ]);
+
+      const { error } = await supabase
+        .from('playlists')
+        .update({ songs: updatedPlaylist })
+        .eq('session_id', sessionId);
+
+      if (error) {
+        console.error('Error updating playlist:', error);
+        toast.error('Failed to update song credits');
+      } else {
+        setPlaylist(updatedPlaylist);
+        updateUserCredits(userCredits - creditDifference);
+        toast.success('Song credits updated');
+      }
+    }
+  };
+
+  const onRemoveFromPlaylist = async (playlistId: string, addedById: string) => {
+    if (sessionId && (isOwner || user?.id === addedById)) {
+      const removedSong = playlist.find(song => song.playlistId === playlistId);
+      const updatedPlaylist = playlist.filter(song => song.playlistId !== playlistId);
       
       const { error } = await supabase
         .from('playlists')
         .update({ songs: updatedPlaylist })
-        .eq('session_id', sessionId)
+        .eq('session_id', sessionId);
 
       if (error) {
-        console.error('Error updating playlist:', error)
+        console.error('Error removing song from playlist:', error);
+        toast.error('Failed to remove song from playlist');
+      } else {
+        setPlaylist(updatedPlaylist);
+        if (removedSong && removedSong.credits && removedSong.credits > 0) {
+          // Refund credits to the user who added the song
+          if (removedSong.added_by.id === user?.id) {
+            // If the current user is the one who added the song
+            const newUserCredits = userCredits + removedSong.credits;
+            await updateUserCredits(newUserCredits);
+            toast.success(`Song removed and ${removedSong.credits} credits refunded`);
+          } else {
+            // If the owner is removing someone else's song
+            const { data, error } = await supabase
+              .from('user_credits')
+              .select('credits')
+              .eq('user_id', removedSong.added_by.id)
+              .single();
+
+            if (data && !error) {
+              const newCredits = data.credits + removedSong.credits;
+              await supabase
+                .from('user_credits')
+                .update({ credits: newCredits })
+                .eq('user_id', removedSong.added_by.id);
+
+              toast.success(`Song removed and ${removedSong.credits} credits refunded to ${removedSong.added_by.name}`);
+            } else {
+              console.error('Error refunding credits:', error);
+              toast.error('Failed to refund credits');
+            }
+          }
+        } else {
+          toast.success('Song removed from playlist');
+        }
       }
     } else {
-      setError('No active playlist session. Please create or join a playlist.')
+      toast.error('You do not have permission to remove this song');
     }
-  }
-
-  const removeFromPlaylist = async (playlistId: string) => {
-    if (sessionId && isOwner) {
-      const updatedPlaylist = playlist.filter(song => song.playlistId !== playlistId)
-      
-      const { error } = await supabase
-        .from('playlists')
-        .update({ songs: updatedPlaylist })
-        .eq('session_id', sessionId)
-
-      if (error) {
-        console.error('Error updating playlist:', error)
-      }
-    } else if (!isOwner) {
-      setError('Only the playlist owner can remove songs')
-    }
-  }
+  };
 
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination || !sessionId || !isOwner) return;
@@ -350,7 +520,10 @@ const handleSeekEnd = useCallback(async (value: number) => {
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-lg shadow-lg relative">
       {!sessionId && (<h1 className="text-2xl font-bold mb-4 text-center">Hi {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'there'}!</h1>)}
-      {sessionId && isOwner && (<h1 className="text-2xl font-bold mb-4 text-center">Now Playing: {currentSong?.title || '-'}</h1>)}
+      {sessionId && isOwner && (<h1 className="text-2xl font-bold mb-4 text-center"> 
+        <span className="text-black-300">{sessionName} <br /> </span>
+        <span className="text-gray-500"> Now Playing: {currentSong?.title || '-'}</span>
+        </h1>)}
       {sessionId && !isOwner && (<h1 className="text-2xl font-bold mb-4 text-center">{sessionName}</h1>)}
       {error && <p className="text-red-500">{error}</p>}
       {isLoading ? (
@@ -364,7 +537,16 @@ const handleSeekEnd = useCallback(async (value: number) => {
             <>
               <SearchForm onSearch={handleSearch} isLoading={isSearching} />
               <SearchResults results={searchResults} onAddToPlaylist={addToPlaylist} />
-              <PlaylistView playlist={playlist} isOwner={isOwner} onRemoveFromPlaylist={removeFromPlaylist} onDragEnd={onDragEnd} />
+              <PlaylistView 
+                playlist={playlist} 
+                isOwner={isOwner} 
+                onRemoveFromPlaylist={onRemoveFromPlaylist} 
+                onDragEnd={onDragEnd} 
+                currentUserId={user?.id || ''}
+                onUpdateCredits={updateSongCredits}
+                currentUserCredits={userCredits}
+                hasCreditedSongs={hasCreditedSongs}
+              />
             </>
           )}
           {currentSong && (
@@ -402,6 +584,13 @@ const handleSeekEnd = useCallback(async (value: number) => {
               onClose={handleCloseQRCode}
             />
           )}
+
+          <CreditPopup
+            isOpen={isCreditPopupOpen}
+            onClose={() => setIsCreditPopupOpen(false)}
+            onConfirm={handleConfirmCredits}
+            maxCredits={userCredits}
+          />
         </>
       )}
     </div>

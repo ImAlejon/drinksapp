@@ -94,7 +94,7 @@ export default function Home() {
             <p className="text-4xl font-bold mb-2">5.0</p>
             <p className="text-xl mb-4">User Rating</p>
             <p className="text-gray-600 text-center mb-4">
-              `&quot;`PartyJuke has revolutionized how we enjoy music at our events!`&quot;`
+              "PartyJuke has revolutionized how we enjoy music at our events!"
             </p>
             <p className="font-semibold">- Sarah M., Event Planner</p>
           </div>

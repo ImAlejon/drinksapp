@@ -2,6 +2,7 @@ import React from 'react'
 import Image from 'next/image'
 import { PlusCircle } from 'lucide-react'
 import { Button } from "@/components/ui/button"
+import { toast } from 'react-hot-toast'  // Add this import
 
 interface Video {
   id: string
@@ -25,6 +26,16 @@ const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToPlaylist 
     return <p className="text-center text-gray-500">No results found.</p>
   }
 
+  const handleAddToPlaylist = async (video: Video) => {
+    try {
+      await onAddToPlaylist(video)
+      toast.success(`Added "${decodeHtmlEntities(video.title)}" to playlist`)  // Add this line
+    } catch (error) {
+      console.error('Error adding to playlist:', error)
+      toast.error('Failed to add video to playlist')  // Add this line
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
       {results.map(video => (
@@ -40,7 +51,7 @@ const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToPlaylist 
           </div>
           <div className="p-4">
             <h3 className="font-medium text-sm mb-2 line-clamp-2">{decodeHtmlEntities(video.title)}</h3>
-            <Button onClick={() => onAddToPlaylist(video)} size="sm" className="w-full">
+            <Button onClick={() => handleAddToPlaylist(video)} size="sm" className="w-full">
               <PlusCircle className="mr-2 h-4 w-4" />
               Add to Playlist
             </Button>

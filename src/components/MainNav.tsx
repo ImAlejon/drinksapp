@@ -14,8 +14,14 @@ import {
 } from "@/components/ui/navigation-menu"
 import { useSupabase } from "./SupabaseProvider"
 import ProfileButton from "./ProfileButton"
+import { useUserCredits } from '@/contexts/UserCreditsContext'
+
+interface MainNavProps {
+  credits: number;
+}
 
 export function MainNav() {
+  const { credits } = useUserCredits();
   const pathname = usePathname()
   const { supabase } = useSupabase()
   const [session, setSession] = React.useState<Session | null>(null)
@@ -47,13 +53,6 @@ export function MainNav() {
         <NavigationMenu>
           <NavigationMenuList>
             <NavigationMenuItem>
-              {/* <Link href="/" legacyBehavior passHref>
-                <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                  Home
-                </NavigationMenuLink>
-              </Link> */}
-            </NavigationMenuItem>
-            <NavigationMenuItem>
               <Link href="/youtube-playlist" legacyBehavior passHref>
                 <NavigationMenuLink className={navigationMenuTriggerStyle()}>
                    Playlist
@@ -62,7 +61,7 @@ export function MainNav() {
             </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
-        <ProfileButton />
+        <ProfileButton credits={credits} />
       </div>
     </div>
   )

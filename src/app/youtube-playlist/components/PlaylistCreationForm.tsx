@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { toast } from 'react-hot-toast'  // Add this import
 
 interface PlaylistCreationFormProps {
   onCreatePlaylist: (playlistName: string) => Promise<void>
@@ -14,6 +15,7 @@ const PlaylistCreationForm: React.FC<PlaylistCreationFormProps> = ({ onCreatePla
     if (playlistName) {
       await onCreatePlaylist(playlistName)
       setPlaylistName('') // Clear the input after submission
+      toast.success('Playlist created successfully')  // Add this line
     }
   }
 

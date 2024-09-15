@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { toast } from 'react-hot-toast'  // Add this import
 
 interface SessionJoinFormProps {
   onJoinSession: (sessionId: string) => Promise<void>
@@ -12,8 +13,16 @@ const SessionJoinForm: React.FC<SessionJoinFormProps> = ({ onJoinSession }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (sessionInputId) {
-      await onJoinSession(sessionInputId)
-      setSessionInputId('') // Clear the input after joining
+      try {
+        await onJoinSession(sessionInputId)
+        toast.success('Successfully joined session')  // Add this line
+        setSessionInputId('') // Clear the input after joining
+      } catch (error) {
+        console.error('Error joining session:', error)
+        toast.error('Failed to join session. Please try again.')  // Add this line
+      }
+    } else {
+      toast.error('Please enter a Session ID')  // Add this line
     }
   }
 
