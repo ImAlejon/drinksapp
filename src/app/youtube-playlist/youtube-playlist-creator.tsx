@@ -59,7 +59,6 @@ const YouTubePlaylistCreator: React.FC = () => {
   const lastUpdateTime = useRef(0)
   const [isCreditPopupOpen, setIsCreditPopupOpen] = useState(false)
   const [pendingSong, setPendingSong] = useState<Video | null>(null)
-  const [hasCreditedSongs, setHasCreditedSongs] = useState(false)
 
   useEffect(() => {
     const initializeComponent = async () => {
@@ -119,7 +118,6 @@ const YouTubePlaylistCreator: React.FC = () => {
       setPlaylist(data.songs || []);
       setSessionName(data.name);
       setIsOwner(user?.id === data.host_id);
-      setHasCreditedSongs(data.songs?.some((song: Song) => song.credits > 0) || false);
     } catch (error) {
       console.error('Error fetching playlist data:', error);
       setError('Failed to load playlist. Please try again.');
@@ -538,14 +536,14 @@ const handleSeekEnd = useCallback(async (value: number) => {
               <SearchForm onSearch={handleSearch} isLoading={isSearching} />
               <SearchResults results={searchResults} onAddToPlaylist={addToPlaylist} />
               <PlaylistView 
-                playlist={playlist} 
-                isOwner={isOwner} 
-                onRemoveFromPlaylist={onRemoveFromPlaylist} 
-                onDragEnd={onDragEnd} 
-                currentUserId={user?.id || ''}
-                onUpdateCredits={updateSongCredits}
-                currentUserCredits={userCredits}
-                hasCreditedSongs={hasCreditedSongs}
+                  playlist={playlist}
+                  isOwner={isOwner}
+                  onRemoveFromPlaylist={onRemoveFromPlaylist}
+                  onDragEnd={onDragEnd}
+                  currentUserId={user?.id || ''}
+                  onUpdateCredits={updateSongCredits}
+                  currentUserCredits={userCredits}
+                  hasCreditedSongs={true}
               />
             </>
           )}

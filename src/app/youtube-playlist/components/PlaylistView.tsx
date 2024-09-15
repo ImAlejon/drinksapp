@@ -1,9 +1,8 @@
 import React from 'react'
 import Image from 'next/image'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
-import { Music, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
-import { toast } from 'react-hot-toast'  // Add this import
 import { Input } from "@/components/ui/input"
 import { useState } from 'react'
 
@@ -43,7 +42,6 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
   onDragEnd, 
   currentUserId,
   onUpdateCredits,
-  currentUserCredits,
   hasCreditedSongs  // Add this line
 }) => {
   const [editingCredits, setEditingCredits] = useState<string | null>(null);
@@ -64,7 +62,7 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
     onRemoveFromPlaylist(playlistId, addedById);
   }
 
-  const renderSong = (song: Song, index?: number) => (
+  const renderSong = (song: Song) => (
     <div className="flex items-center justify-between bg-gray-100 p-2 rounded mb-2">
       <div className="flex items-center gap-2">
         <Image 

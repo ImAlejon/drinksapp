@@ -1,7 +1,6 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import crypto from 'crypto'
 
 export async function POST(req: Request) {
   const supabase = createRouteHandlerClient({ cookies })
@@ -30,7 +29,6 @@ export async function POST(req: Request) {
   }
 
   // If no existing playlist found, proceed with creation
-  const sessionId = crypto.randomUUID()
 
   console.log('Attempting to create playlist for user:', user.id)
 

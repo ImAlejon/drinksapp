@@ -16,10 +16,6 @@ import { useSupabase } from "./SupabaseProvider"
 import ProfileButton from "./ProfileButton"
 import { useUserCredits } from '@/contexts/UserCreditsContext'
 
-interface MainNavProps {
-  credits: number;
-}
-
 export function MainNav() {
   const { credits } = useUserCredits();
   const pathname = usePathname()
