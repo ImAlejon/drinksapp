@@ -6,69 +6,32 @@ export async function POST(req: Request) {
   const supabase = createRouteHandlerClient({ cookies })
   const { name } = await req.json()
 
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    console.error('No authenticated user found')
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  // Check if a playlist with this name already exists
-  const { data: existingPlaylists, error: fetchError } = await supabase
-    .from('playlists')
-    .select('name')
-    .eq('name', name)
-
-  if (fetchError) {
-    console.error('Error checking for existing playlists:', fetchError)
-    return NextResponse.json({ error: 'Failed to create playlist' }, { status: 500 })
-  }
-
-  if (existingPlaylists && existingPlaylists.length > 0) {
-    return NextResponse.json({ error: 'A playlist with this name already exists' }, { status: 400 })
-  }
-
-  // If no existing playlist found, proceed with creation
-
-  console.log('Attempting to create playlist for user:', user.id)
-
   try {
-    // Check if the user already has a playlist
-    const { data: existingPlaylist, error: existingError } = await supabase
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Not authenticated')
+
+    // Deactivate any existing active playlists for this user
+    await supabase
       .from('playlists')
-      .select('session_id, host_id')
+      .update({ is_active: false })
       .eq('host_id', user.id)
-      .single()
+      .eq('is_active', true)
 
-    if (existingError && existingError.code !== 'PGRST116') {
-      throw existingError
-    }
-
-    if (existingPlaylist) {
-      console.log('User already has a playlist:', existingPlaylist)
-      return NextResponse.json({ 
-        message: 'User already has a playlist',
-        sessionId: existingPlaylist.session_id,
-        hostId: existingPlaylist.host_id
-      }, { status: 200 })
-    }
-
-    // Create a new playlist
+    // Create the new playlist
     const { data, error } = await supabase
       .from('playlists')
-      .insert({ name, host_id: user.id })
+      .insert({
+        name,
+        host_id: user.id,
+        is_active: true,  // Set the new playlist as active
+        songs: []
+      })
       .select()
       .single()
 
     if (error) throw error
 
-    console.log('New playlist created:', data)
-    console.log('Playlist creation result:', data)
-    return NextResponse.json({ 
-      message: 'Playlist created successfully',
-      sessionId: data.session_id,
-      hostId: data.host_id
-    })
+    return NextResponse.json(data)
   } catch (error) {
     console.error('Error creating playlist:', error)
     return NextResponse.json({ error: 'Failed to create playlist' }, { status: 500 })
@@ -123,12 +86,29 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Session ID is required' }, { status: 400 })
   }
 
-  const { songs } = await req.json()
+  const { songs, is_playing, current_song_index } = await req.json()
 
   try {
+    // Define a type for the song structure
+    type Song = {
+      id: string;
+      title: string;
+      // Add other properties that your songs have
+    };
+
+    const updateData: {
+      songs?: Song[];
+      is_playing?: boolean;
+      current_song_index?: number;
+    } = {}
+
+    if (songs !== undefined) updateData.songs = songs as Song[]
+    if (is_playing !== undefined) updateData.is_playing = is_playing
+    if (current_song_index !== undefined) updateData.current_song_index = current_song_index
+
     const { data, error } = await supabase
       .from('playlists')
-      .update({ songs: songs })
+      .update(updateData)
       .eq('session_id', sessionId)
       .select()
 

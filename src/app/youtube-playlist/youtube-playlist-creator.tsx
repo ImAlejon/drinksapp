@@ -14,9 +14,10 @@ import FullScreenQRCode from '@/components/FullScreenQRCode'
 import { YouTubePlayer } from 'youtube-player/dist/types'
 import YouTube from 'react-youtube'
 import { toast } from 'react-hot-toast'
-import { AlertCircle, CheckCircle, XCircle } from 'lucide-react'
+import { CheckCircle, XCircle } from 'lucide-react'
 import CreditPopup from '@/components/CreditPopup'
 import { useUserCredits } from '@/contexts/UserCreditsContext'
+import router from 'next/router'
 
 
 
@@ -106,7 +107,7 @@ const YouTubePlaylistCreator: React.FC = () => {
     if (sessionId) {
       fetchPlaylistData(sessionId);
     }
-  }, [sessionId]);
+  }, );
 
   const fetchPlaylistData = async (sid: string) => {
     try {
@@ -169,45 +170,38 @@ const YouTubePlaylistCreator: React.FC = () => {
     )
   }
 
-  const createPlaylist = async (playlistName: string) => {
-    if (!user) return
+ const createPlaylist = async (playlistName: string) => {
+  if (!user) return
 
-    try {
-      const response = await fetch('/api/playlists', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: playlistName }),
-      })
+  try {
+    const response = await fetch('/api/playlists', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: playlistName }),
+    })
 
-      const data = await response.json()
+    const data = await response.json()
 
-      if (response.ok) {
-        if (data.message === 'User already has a playlist') {
-          showCustomToast('You already have a playlist. Focusing on existing playlist.', <AlertCircle className="h-5 w-5 text-yellow-500" />, 2000)
-          setSessionId(data.sessionId)
-          setSessionName(data.name || playlistName)
-          setIsOwner(true)
-          setPlaylist(data.songs || [])
-        } else {
-          showCustomToast('Playlist created successfully', <CheckCircle className="h-5 w-5 text-green-500" />)
-          setSessionId(data.sessionId)
-          setSessionName(playlistName)
-          setIsOwner(true)
-          setPlaylist([])
-        }
-      } else {
-        throw new Error(data.error || 'Failed to create playlist')
-      }
-    } catch (error) {
-      console.error('Error creating playlist:', error)
-      showCustomToast(
-        error instanceof Error ? error.message : 'An unknown error occurred',
-        <XCircle className="h-5 w-5 text-red-500" />
-      )
+    if (response.ok) {
+      showCustomToast('Playlist created successfully', <CheckCircle className="h-5 w-5 text-green-500" />)
+      setSessionId(data.session_id)
+      setSessionName(playlistName)
+      setIsOwner(true)
+      setPlaylist([])
+      router.push(`/youtube-playlist?sessionId=${data.session_id}`)
+    } else {
+      throw new Error(data.error || 'Failed to create playlist')
     }
+  } catch (error) {
+    console.error('Error creating playlist:', error)
+    showCustomToast(
+      error instanceof Error ? error.message : 'An unknown error occurred',
+      <XCircle className="h-5 w-5 text-red-500" />
+    )
   }
+}
 
   const handleSearch = async (query: string) => {
     setIsSearching(true)
@@ -515,6 +509,35 @@ const handleSeekEnd = useCallback(async (value: number) => {
     };
   }, [isPlaying]);
 
+const checkActiveSession = async () => {
+  console.log('Checking active session, user:', user)
+  if (user) {
+    try {
+      const response = await fetch('/api/check-active-session')
+      const data = await response.json()
+      console.log('Check active session response:', data)
+      if (data.activeSession) {
+        console.log('Active session found, redirecting...')
+        setSessionId(data.activeSession.session_id)
+        setSessionName(data.activeSession.name)
+        setIsOwner(true)
+        setPlaylist(data.activeSession.songs || [])
+        router.push(`/youtube-playlist?sessionId=${data.activeSession.session_id}`)
+      } else {
+        console.log('No active session found')
+      }
+    } catch (error) {
+      console.error('Error checking active session:', error)
+    }
+  } else {
+    console.log('No user found')
+  }
+}
+
+useEffect(() => {
+  checkActiveSession()
+}, )
+
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 bg-white rounded-lg shadow-lg relative">
       {!sessionId && (<h1 className="text-2xl font-bold mb-4 text-center">Hi {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'there'}!</h1>)}
@@ -547,21 +570,27 @@ const handleSeekEnd = useCallback(async (value: number) => {
               />
             </>
           )}
-          {currentSong && (
-            <VideoPlayer
-              currentSong={currentSong}
-              isPlaying={isPlaying}
-              onPlayerReady={onPlayerReady}
-              onPlayerStateChange={onPlayerStateChange}
-              onTogglePlayPause={togglePlayPause}
-              onSkip={handleSkip}
-              onSkipSong={playNextSong}
-              duration={duration}
-              currentTime={currentTime}
-              onSeek={handleSeek}
-              onSeekEnd={handleSeekEnd}
-            />
-          )}
+
+           {currentSong && (
+  <VideoPlayer
+    currentSong={currentSong}
+    isPlaying={isPlaying}
+    onPlayerReady={onPlayerReady}
+    onPlayerStateChange={onPlayerStateChange}
+    onTogglePlayPause={togglePlayPause}
+    onSkip={handleSkip}
+    onSkipSong={playNextSong}
+    duration={duration}
+    currentTime={currentTime}
+    onSeek={handleSeek}
+    onSeekEnd={handleSeekEnd}
+    creditsUsed={currentSong.credits}
+    onRefundCredits={(amount) => {
+      updateUserCredits(userCredits + amount);
+      // You might want to update the playlist or current song state here as well
+    }}
+  />
+)}
 
           { isOwner && playlist.length > 0 && !currentSong && (
             <Button onClick={playNextSong} className="mt-4">

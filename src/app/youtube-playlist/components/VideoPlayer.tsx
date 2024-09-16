@@ -11,7 +11,7 @@ interface Song {
 }
 
 interface VideoPlayerProps {
-  currentSong: Song
+  currentSong: Song;
   isPlaying: boolean
   onPlayerReady: (event: YouTubeEvent<YouTubePlayer>) => void
   onPlayerStateChange: (event: YouTubeEvent<number>) => void
@@ -22,6 +22,8 @@ interface VideoPlayerProps {
   currentTime: number
   onSeek: (value: number) => void
   onSeekEnd: (value: number) => void
+  creditsUsed: number;
+  onRefundCredits: (amount: number) => void;
 }
 
 const formatTime = (time: number) => {
@@ -41,9 +43,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   duration,
   currentTime,
   onSeek,
-  onSeekEnd
+  onSeekEnd,
+  creditsUsed,
+  onRefundCredits
 }) => {
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
   const [volume, setVolume] = useState(100)
   const [prevVolume, setPrevVolume] = useState(100)
   const playerRef = useRef<YouTubePlayer | null>(null)
@@ -75,8 +79,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }
 
   const handleError = () => {
-    setError('An error occurred while playing the video.')
-    showCustomToast('Error playing video. Skipping to next song.', <SkipForward className="h-5 w-5 text-red-500" />)
+    showCustomToast('Error playing video. Credits refunded. Skipping to next song.', <SkipForward className="h-5 w-5 text-red-500" />)
+    onRefundCredits(creditsUsed)
     onSkipSong();
   };
 
@@ -108,7 +112,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     playerRef.current = event.target
     onPlayerReady(event)
   }
-
+const decodeHtmlEntities = (text: string): string => {
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = text;
+  return textarea.value;
+}
   return (
     <div className="mb-6 max-w-3xl mx-auto">
       {error ? (
@@ -157,7 +165,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           <span>{formatTime(duration)}</span>
         </div>
         <div className="flex flex-wrap justify-between items-center mt-2">
-          <h3 className="font-medium text-sm mb-2 w-full">{currentSong.title}</h3>
+          <h3 className="font-medium text-sm mb-2 w-full">{decodeHtmlEntities(currentSong.title)}</h3>
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Button onClick={() => {
               onSkip(-10)

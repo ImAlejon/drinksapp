@@ -11,6 +11,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { useUserCredits } from '@/contexts/UserCreditsContext';
 
 interface ProfileButtonProps {
   credits: number;
@@ -20,6 +21,7 @@ export default function ProfileButton({ credits }: ProfileButtonProps) {
 	const { supabase } = useSupabase();
 	const router = useRouter();
 	const [user, setUser] = useState<User | null>(null);
+	const { resetCredits } = useUserCredits();
 
 	useEffect(() => {
 		const fetchUser = async () => {
@@ -31,6 +33,7 @@ export default function ProfileButton({ credits }: ProfileButtonProps) {
 
 	const handleLogout = async () => {
 		await supabase.auth.signOut();
+		resetCredits(); // Reset credits to 0
 		router.push('/login');
 	};
 

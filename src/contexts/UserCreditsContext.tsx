@@ -7,6 +7,7 @@ interface UserCreditsContextType {
   credits: number;
   setCredits: React.Dispatch<React.SetStateAction<number>>;
   updateCredits: (newCredits: number) => Promise<void>;
+  resetCredits: () => void;
 }
 
 const UserCreditsContext = createContext<UserCreditsContextType | undefined>(undefined);
@@ -27,31 +28,25 @@ export const UserCreditsProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
         if (data && !error) {
           setCredits(data.credits);
-        } else {
-          console.error('Error fetching user credits:', error);
         }
-
-        if (user) {
-          const creditSubscription = supabase
-            .channel('user_credits')
-            .on('postgres_changes', {
-              event: 'UPDATE',
-              schema: 'public',
-              table: 'user_credits',
-              filter: `user_id=eq.${user.id}`
-            }, (payload) => {
-              setCredits(payload.new.credits);
-            })
-            .subscribe();
-
-          return () => {
-            supabase.removeChannel(creditSubscription);
-          };
-        }
+      } else {
+        setCredits(0); // Reset credits if no user is logged in
       }
     };
 
     fetchCredits();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        fetchCredits();
+      } else if (event === 'SIGNED_OUT') {
+        setCredits(0);
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, [supabase]);
 
   const updateCredits = async (newCredits: number) => {
@@ -70,8 +65,12 @@ export const UserCreditsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   };
 
+  const resetCredits = () => {
+    setCredits(0);
+  };
+
   return (
-    <UserCreditsContext.Provider value={{ credits, setCredits, updateCredits }}>
+    <UserCreditsContext.Provider value={{ credits, setCredits, updateCredits, resetCredits }}>
       {children}
     </UserCreditsContext.Provider>
   );

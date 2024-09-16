@@ -17,10 +17,17 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       try {
         const { data: { session } } = await supabase.auth.getSession()
       
-        if (!session?.user && pathname !== '/' && pathname !== '/login' && !pathname.startsWith('/auth')) {
+        if (session?.user) {
+          const response = await fetch('/api/check-active-session')
+          const data = await response.json()
+          
+          if (data.activeSession && pathname !== '/youtube-playlist') {
+            router.push(`/youtube-playlist?sessionId=${data.activeSession.session_id}`)
+          } else if (pathname === '/' || pathname === '/login') {
+            router.push('/youtube-playlist')
+          }
+        } else if (pathname !== '/' && pathname !== '/login' && !pathname.startsWith('/auth')) {
           router.push('/')
-        } else if (session?.user && (pathname === '/' || pathname === '/login')) {
-          router.push('/youtube-playlist')
         }
       } catch (e) {
         console.error("Error checking auth status:", e)

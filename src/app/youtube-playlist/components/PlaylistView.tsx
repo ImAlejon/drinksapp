@@ -3,8 +3,6 @@ import Image from 'next/image'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import { Trash2 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { useState } from 'react'
 
 interface Song {
   id: string
@@ -29,12 +27,6 @@ interface PlaylistViewProps {
   hasCreditedSongs: boolean;
 }
 
-const decodeHtmlEntities = (text: string): string => {
-  const textarea = document.createElement('textarea');
-  textarea.innerHTML = text;
-  return textarea.value;
-}
-
 const PlaylistView: React.FC<PlaylistViewProps> = ({ 
   playlist, 
   isOwner, 
@@ -42,69 +34,43 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
   onDragEnd, 
   currentUserId,
   onUpdateCredits,
-  hasCreditedSongs  // Add this line
+  hasCreditedSongs
 }) => {
-  const [editingCredits, setEditingCredits] = useState<string | null>(null);
-  const [newCredits, setNewCredits] = useState<number>(0);
-
-  const handleEditCredits = (song: Song) => {
-    setEditingCredits(song.playlistId);
-    setNewCredits(song.credits);
-  };
-
-  const handleUpdateCredits = (playlistId: string) => {
-    onUpdateCredits(playlistId, newCredits);
-    setEditingCredits(null);
-  };
-
-  const handleRemoveFromPlaylist = (playlistId: string, addedById: string) => {
-    console.log('Attempting to remove song:', playlistId, 'Added by:', addedById, 'Current user:', currentUserId);
-    onRemoveFromPlaylist(playlistId, addedById);
-  }
-
   const renderSong = (song: Song) => (
-    <div className="flex items-center justify-between bg-gray-100 p-2 rounded mb-2">
-      <div className="flex items-center gap-2">
+    <div key={song.playlistId} className="flex items-center justify-between p-2 bg-white rounded-lg shadow">
+      <div className="flex items-center space-x-2">
         <Image 
           src={song.thumbnail} 
-          alt={decodeHtmlEntities(song.title)} 
-          width={48}
-          height={36}
-          className="object-cover rounded" 
+          alt={song.title} 
+          width={40} 
+          height={40} 
+          className="rounded"
         />
-        <div className="flex flex-col">
-          <span className="font-medium line-clamp-1">{decodeHtmlEntities(song.title)}</span>
-          <span className="text-xs text-gray-500">Added by: {song.added_by.name}</span>
-          {editingCredits === song.playlistId ? (
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                value={newCredits}
-                onChange={(e) => setNewCredits(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-20"
-              />
-              <Button size="sm" onClick={() => handleUpdateCredits(song.playlistId)}>Update</Button>
-              <Button size="sm" variant="outline" onClick={() => setEditingCredits(null)}>Cancel</Button>
-            </div>
-          ) : (
-            <span className="text-xs text-gray-500">
-              Credits: {song.credits}
-              {(isOwner || currentUserId === song.added_by.id) && (
-                <Button size="sm" variant="link" onClick={() => handleEditCredits(song)}>Edit</Button>
-              )}
-            </span>
-          )}
+        <div>
+          <p className="font-semibold">{song.title}</p>
+          <p className="text-sm text-gray-500">Added by: {song.added_by.name}</p>
         </div>
       </div>
-      {(isOwner || currentUserId === song.added_by.id) && (
+      <div className="flex items-center space-x-2">
         <Button 
           variant="ghost" 
           size="sm" 
-          onClick={() => handleRemoveFromPlaylist(song.playlistId, song.added_by.id)}
+          onClick={() => onRemoveFromPlaylist(song.playlistId, song.added_by.id)}
+          disabled={!isOwner && currentUserId !== song.added_by.id}
         >
-          <Trash2 className="h-4 w-4 text-destructive" />
+          <Trash2 className={`h-4 w-4 ${isOwner || currentUserId === song.added_by.id ? 'text-destructive' : 'text-gray-300'}`} />
         </Button>
-      )}
+        {currentUserId === song.added_by.id ? (
+          <input
+            type="number"
+            value={song.credits}
+            onChange={(e) => onUpdateCredits(song.playlistId, parseInt(e.target.value))}
+            className="w-16 text-center border rounded"
+          />
+        ) : (
+          <span className="w-16 text-center">{song.credits} credits</span>
+        )}
+      </div>
     </div>
   )
 
@@ -117,7 +83,7 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
             {(provided) => (
               <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
                 {playlist.map((song, index) => (
-                  <Draggable key={`${song.id}-${index}`} draggableId={song.playlistId} index={index}>
+                  <Draggable key={song.playlistId} draggableId={song.playlistId} index={index}>
                     {(provided) => (
                       <div
                         ref={provided.innerRef}

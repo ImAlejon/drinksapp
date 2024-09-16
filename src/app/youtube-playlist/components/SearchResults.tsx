@@ -29,7 +29,6 @@ const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToPlaylist 
   const handleAddToPlaylist = async (video: Video) => {
     try {
       await onAddToPlaylist(video)
-      toast.success(`Added "${decodeHtmlEntities(video.title)}" to playlist`)  // Add this line
     } catch (error) {
       console.error('Error adding to playlist:', error)
       toast.error('Failed to add video to playlist')  // Add this line

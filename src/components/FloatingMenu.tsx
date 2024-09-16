@@ -6,6 +6,7 @@ import { Plus, QrCode, X, UserPlus, Share2 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Input } from "@/components/ui/input";
 import * as QRCodeReact from 'qrcode.react'; // Updated import
+import toast from 'react-hot-toast';
 
 // Define the props interface for QRCodeScanner
 interface QRCodeScannerProps {
@@ -35,7 +36,7 @@ const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ onScan, onClose }) => {
         scannerRef.current.clear().catch(console.error);
       }
     };
-  }, [cameras, currentCameraIndex]);
+  }, );
 
   const initializeScanner = () => {
     if (scannerRef.current) {
@@ -224,6 +225,7 @@ const FloatingMenu: React.FC<FloatingMenuProps> = ({
                   <Button
                     onClick={() => {
                       navigator.clipboard.writeText(sessionId);
+                      toast.success('Session ID copied to clipboard')
                       // Optionally, you can show a toast notification here
                     }}
                     className="mt-4"

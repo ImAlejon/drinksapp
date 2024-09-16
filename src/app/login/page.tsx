@@ -22,8 +22,16 @@ export default function Login() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
-      router.push('/')
-      router.refresh()
+
+      // Check for active session
+      const response = await fetch('/api/check-active-session')
+      const data = await response.json()
+
+      if (data.activeSession) {
+        router.push(`/youtube-playlist?sessionId=${data.activeSession.session_id}`)
+      } else {
+        router.push('/youtube-playlist')
+      }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'An unknown error occurred')
     } finally {
@@ -43,6 +51,8 @@ export default function Login() {
         }
       })
       if (error) throw error
+      // Note: We can't fetch credits here because the user isn't logged in yet.
+      // We'll need to handle this in the callback route.
     } catch (error) {
       setError(error instanceof Error ? error.message : 'An unknown error occurred')
     } finally {
